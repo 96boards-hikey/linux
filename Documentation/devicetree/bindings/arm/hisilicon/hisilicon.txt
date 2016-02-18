@@ -229,3 +229,9 @@ Required Properties:
   [1]: bootwrapper size
   [2]: relocation physical address
   [3]: relocation size
+
+-----------------------------------------------------------------------
+Hisilicon ion
+
+Required properties:
+- compatible : "hisilicon,ion";
