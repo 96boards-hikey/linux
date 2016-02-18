@@ -14,9 +14,10 @@
 #ifndef LINUX_MMC_DW_MMC_H
 #define LINUX_MMC_DW_MMC_H
 
-#include <linux/scatterlist.h>
-#include <linux/mmc/core.h>
 #include <linux/dmaengine.h>
+#include <linux/mmc/core.h>
+#include <linux/reset.h>
+#include <linux/scatterlist.h>
 
 #define MAX_MCI_SLOTS	2
 
@@ -276,6 +277,7 @@ struct dw_mci_board {
 	/* delay in mS before detecting cards after interrupt */
 	u32 detect_delay_ms;
 
+	struct reset_control *rstc;
 	struct dw_mci_dma_ops *dma_ops;
 	struct dma_pdata *data;
 };
