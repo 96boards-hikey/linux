@@ -466,6 +466,14 @@ config BMP085_SPI
 	  To compile this driver as a module, choose M here: the
 	  module will be called bmp085-spi.
 
+config HI6220_SYSCFG
+	bool "Hisilicon HI6220 System Configuration driver"
+	depends on ARCH_HISI
+	default y
+	help
+	  Hisilicon HI6220 uses some registers to configure some chip hosts to
+          work or not, e.g. disable the UART hosts reset and let's them work.
+
 config PCH_PHUB
 	tristate "Intel EG20T PCH/LAPIS Semicon IOH(ML7213/ML7223/ML7831) PHUB"
 	select GENERIC_NET_UTILS
