@@ -45,9 +45,26 @@
  * subset of the MIPI DCS command set.
  */
 
+static const struct device_type mipi_dsi_device_type;
+
 static int mipi_dsi_device_match(struct device *dev, struct device_driver *drv)
 {
-	return of_driver_match_device(dev, drv);
+	struct mipi_dsi_device *dsi;
+
+	dsi = dev->type == &mipi_dsi_device_type ?
+		to_mipi_dsi_device(dev) : NULL;
+
+	if (!dsi)
+		return 0;
+
+	if (of_driver_match_device(dev, drv))
+		return 1;
+
+	if (!strcmp(drv->name, "mipi_dsi_dummy") &&
+			!strcmp(dsi->name, "dummy"))
+		return 1;
+
+	return 0;
 }
 
 static const struct dev_pm_ops mipi_dsi_device_pm_ops = {
@@ -102,9 +119,41 @@ static const struct device_type mipi_dsi_device_type = {
 	.release = mipi_dsi_dev_release,
 };
 
-static struct mipi_dsi_device *mipi_dsi_device_alloc(struct mipi_dsi_host *host)
+struct mipi_dsi_device_info {
+	char name[DSI_DEV_NAME_SIZE];
+	u32 reg;
+	struct device_node *node;
+};
+
+static int __dsi_check_chan_busy(struct device *dev, void *data)
 {
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	u32 reg = *(u32 *) data;
+
+	if (dsi && dsi->channel == reg)
+		return -EBUSY;
+
+	return 0;
+}
+
+static int mipi_dsi_check_chan_busy(struct mipi_dsi_host *host, u32 reg)
+{
+	return device_for_each_child(host->dev, &reg, __dsi_check_chan_busy);
+}
+
+static struct mipi_dsi_device *
+mipi_dsi_device_new(struct mipi_dsi_host *host,
+		    struct mipi_dsi_device_info *info)
+{
+	struct device *dev = host->dev;
 	struct mipi_dsi_device *dsi;
+	int r;
+
+	if (info->reg > 3) {
+		dev_err(dev, "dsi device %s has invalid channel value: %u\n",
+			info->name, info->reg);
+		return ERR_PTR(-EINVAL);
+	}
 
 	dsi = kzalloc(sizeof(*dsi), GFP_KERNEL);
 	if (!dsi)
@@ -114,62 +163,90 @@ static struct mipi_dsi_device *mipi_dsi_device_alloc(struct mipi_dsi_host *host)
 	dsi->dev.bus = &mipi_dsi_bus_type;
 	dsi->dev.parent = host->dev;
 	dsi->dev.type = &mipi_dsi_device_type;
+	dsi->dev.of_node = info->node;
+	dsi->channel = info->reg;
+	strlcpy(dsi->name, info->name, sizeof(dsi->name));
 
-	device_initialize(&dsi->dev);
+	dev_set_name(&dsi->dev, "%s.%d", dev_name(host->dev), info->reg);
+
+	r = mipi_dsi_check_chan_busy(host, info->reg);
+	if (r)
+		goto err;
+
+	r = device_register(&dsi->dev);
+	if (r)
+		goto err;
 
 	return dsi;
-}
-
-static int mipi_dsi_device_add(struct mipi_dsi_device *dsi)
-{
-	struct mipi_dsi_host *host = dsi->host;
-
-	dev_set_name(&dsi->dev, "%s.%d", dev_name(host->dev),  dsi->channel);
-
-	return device_add(&dsi->dev);
+err:
+	kfree(dsi);
+	return ERR_PTR(r);
 }
 
 static struct mipi_dsi_device *
 of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
 {
-	struct mipi_dsi_device *dsi;
 	struct device *dev = host->dev;
+	struct mipi_dsi_device_info info = { };
 	int ret;
-	u32 reg;
 
-	ret = of_property_read_u32(node, "reg", &reg);
+	if (of_modalias_node(node, info.name, sizeof(info.name)) < 0) {
+		dev_err(dev, "modalias failure on %s\n", node->full_name);
+		return ERR_PTR(-EINVAL);
+	}
+
+	ret = of_property_read_u32(node, "reg", &info.reg);
 	if (ret) {
 		dev_err(dev, "device node %s has no valid reg property: %d\n",
 			node->full_name, ret);
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (reg > 3) {
-		dev_err(dev, "device node %s has invalid reg property: %u\n",
-			node->full_name, reg);
-		return ERR_PTR(-EINVAL);
-	}
+	info.node = of_node_get(node);
 
-	dsi = mipi_dsi_device_alloc(host);
-	if (IS_ERR(dsi)) {
-		dev_err(dev, "failed to allocate DSI device %s: %ld\n",
-			node->full_name, PTR_ERR(dsi));
-		return dsi;
-	}
-
-	dsi->dev.of_node = of_node_get(node);
-	dsi->channel = reg;
-
-	ret = mipi_dsi_device_add(dsi);
-	if (ret) {
-		dev_err(dev, "failed to add DSI device %s: %d\n",
-			node->full_name, ret);
-		kfree(dsi);
-		return ERR_PTR(ret);
-	}
-
-	return dsi;
+	return mipi_dsi_device_new(host, &info);
 }
+
+static struct mipi_dsi_driver dummy_dsi_driver = {
+	.driver.name = "mipi_dsi_dummy",
+};
+
+struct mipi_dsi_device *mipi_dsi_new_dummy(struct mipi_dsi_host *host, u32 reg)
+{
+	struct mipi_dsi_device_info info = { "dummy", reg, NULL, };
+
+	return mipi_dsi_device_new(host, &info);
+}
+EXPORT_SYMBOL(mipi_dsi_new_dummy);
+
+void mipi_dsi_unregister_device(struct mipi_dsi_device *dsi)
+{
+	if (dsi)
+		device_unregister(&dsi->dev);
+}
+EXPORT_SYMBOL(mipi_dsi_unregister_device);
+
+static DEFINE_MUTEX(host_lock);
+static LIST_HEAD(host_list);
+
+struct mipi_dsi_host *of_find_mipi_dsi_host_by_node(struct device_node *node)
+{
+	struct mipi_dsi_host *host;
+
+	mutex_lock(&host_lock);
+
+	list_for_each_entry(host, &host_list, list) {
+		if (host->dev->of_node == node) {
+			mutex_unlock(&host_lock);
+			return host;
+		}
+	}
+
+	mutex_unlock(&host_lock);
+
+	return NULL;
+}
+EXPORT_SYMBOL(of_find_mipi_dsi_host_by_node);
 
 int mipi_dsi_host_register(struct mipi_dsi_host *host)
 {
@@ -181,6 +258,10 @@ int mipi_dsi_host_register(struct mipi_dsi_host *host)
 			continue;
 		of_mipi_dsi_device_add(host, node);
 	}
+
+	mutex_lock(&host_lock);
+	list_add_tail(&host->list, &host_list);
+	mutex_unlock(&host_lock);
 
 	return 0;
 }
@@ -198,6 +279,10 @@ static int mipi_dsi_remove_device_fn(struct device *dev, void *priv)
 void mipi_dsi_host_unregister(struct mipi_dsi_host *host)
 {
 	device_for_each_child(host->dev, NULL, mipi_dsi_remove_device_fn);
+
+	mutex_lock(&host_lock);
+	list_del_init(&host->list);
+	mutex_unlock(&host_lock);
 }
 EXPORT_SYMBOL(mipi_dsi_host_unregister);
 
@@ -924,7 +1009,13 @@ EXPORT_SYMBOL(mipi_dsi_driver_unregister);
 
 static int __init mipi_dsi_bus_init(void)
 {
-	return bus_register(&mipi_dsi_bus_type);
+	int ret;
+
+	ret = bus_register(&mipi_dsi_bus_type);
+	if (ret < 0)
+		return ret;
+
+	return mipi_dsi_driver_register(&dummy_dsi_driver);
 }
 postcore_initcall(mipi_dsi_bus_init);
 
