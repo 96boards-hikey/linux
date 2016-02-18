@@ -1,0 +1,10 @@
+config DRM_HISI
+	tristate "DRM Support for Hisilicon SoCs Platform"
+	depends on DRM
+	select DRM_KMS_HELPER
+	select DRM_GEM_CMA_HELPER
+	select DRM_KMS_CMA_HELPER
+	select DRM_MIPI_DSI
+	help
+	  Choose this option if you have a hisilicon chipsets(hi6220).
+	  If M is selected the module will be called hisi-drm.

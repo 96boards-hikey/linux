@@ -1,0 +1,42 @@
+Device-Tree bindings for hisilicon ADE display controller driver
+
+ADE (Advanced Display Engine) is the display controller which grab image
+data from memory, do composition, do post image processing, generate RGB
+timing stream and transfer to DSI.
+
+Required properties:
+- compatible: value should be one of the following
+	"hisilicon,hi6220-ade".
+- reg: physical base address and length of the controller's registers.
+- reg-names: name of physical base.
+- interrupt: the interrupt number.
+- clocks: the clocks needed.
+- clock-names: the name of the clocks.
+- ade_core_clk_rate: ADE core clock rate.
+- media_noc_clk_rate: media noc module clock rate.
+
+
+A example of HiKey board hi6220 SoC specific DT entry:
+Example:
+
+	ade: ade@f4100000 {
+		compatible = "hisilicon,hi6220-ade";
+		reg = <0x0 0xf4100000 0x0 0x7800>,
+		      <0x0 0xf4410000 0x0 0x1000>;
+		reg-names = "ade_base",
+			    "media_base";
+		interrupts = <0 115 4>;
+
+		clocks = <&media_ctrl HI6220_ADE_CORE>,
+			 <&media_ctrl HI6220_CODEC_JPEG>,
+			 <&media_ctrl HI6220_ADE_PIX_SRC>,
+			 <&media_ctrl HI6220_PLL_SYS>,
+			 <&media_ctrl HI6220_PLL_SYS_MEDIA>;
+		clock-names  = "clk_ade_core",
+			       "aclk_codec_jpeg_src",
+			       "clk_ade_pix",
+			       "clk_syspll_src",
+			       "clk_medpll_src";
+		ade_core_clk_rate = <360000000>;
+		media_noc_clk_rate = <288000000>;
+	};

@@ -1,0 +1,53 @@
+Device-Tree bindings for hisilicon DSI controller driver
+
+A DSI controller resides in the middle of display controller and external
+HDMI converter.
+
+Required properties:
+- compatible: value should be one of the following
+	"hisilicon,hi6220-dsi".
+- reg: physical base address and length of the controller's registers.
+- clocks: the clocks needed.
+- clock-names: the name of the clocks.
+- port: DSI controller output port. This contains one endpoint subnode, with its
+  remote-endpoint set to the phandle of the connected external HDMI endpoint.
+  See Documentation/devicetree/bindings/graph.txt for device graph info.
+
+A example of HiKey board hi6220 SoC and board specific DT entry:
+Example:
+
+SoC specific:
+	dsi: dsi@0xf4107800 {
+		compatible = "hisilicon,hi6220-dsi";
+		reg = <0x0 0xf4107800 0x0 0x100>;
+		clocks = <&media_ctrl  HI6220_DSI_PCLK>;
+		clock-names = "pclk_dsi";
+
+		port {
+			dsi_out: endpoint {
+				remote-endpoint = <&adv_in>;
+			};
+		};
+
+	};
+
+Board specific:
+	i2c2: i2c@f7102000 {
+		status = "ok";
+
+		adv7533: adv7533@39 {
+			compatible = "adi,adv7533";
+			reg = <0x39>;
+			interrupt-parent = <&gpio1>;
+			interrupts = <1 2>;
+			pd-gpio = <&gpio0 4 0>;
+			adi,dsi-lanes = <4>;
+
+			port {
+				adv_in: endpoint {
+					remote-endpoint = <&dsi_out>;
+				};
+			};
+		};
+	};
+

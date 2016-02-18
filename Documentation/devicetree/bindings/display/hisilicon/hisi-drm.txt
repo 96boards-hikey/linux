@@ -1,0 +1,66 @@
+Hisilicon DRM master device
+
+The Hisilicon DRM master device is a virtual device needed to list all
+the other display relevant nodes that comprise the display subsystem.
+
+
+Required properties:
+- compatible: Should be "hisilicon,<chip>-dss"
+- #address-cells: should be set to 2.
+- #size-cells: should be set to 2.
+- range: to allow probing of subdevices.
+
+Optional properties:
+- dma-coherent: Present if dma operations are coherent.
+
+Required sub nodes:
+All the device nodes of display subsystem of SoC should be the sub nodes.
+Such as display controller node, DSI node and so on.
+
+A example of HiKey board hi6220 SoC specific DT entry:
+Example:
+
+	display-subsystem {
+		compatible = "hisilicon,hi6220-dss";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		dma-coherent;
+
+		ade: ade@f4100000 {
+			compatible = "hisilicon,hi6220-ade";
+			reg = <0x0 0xf4100000 0x0 0x7800>,
+			      <0x0 0xf4410000 0x0 0x1000>;
+			reg-names = "ade_base",
+				    "media_base";
+			interrupts = <0 115 4>; /* ldi interrupt */
+
+			clocks = <&media_ctrl HI6220_ADE_CORE>,
+				 <&media_ctrl HI6220_CODEC_JPEG>,
+				 <&media_ctrl HI6220_ADE_PIX_SRC>,
+				 <&media_ctrl HI6220_PLL_SYS>,
+				 <&media_ctrl HI6220_PLL_SYS_MEDIA>;
+			/*clock name*/
+			clock-names  = "clk_ade_core",
+				       "aclk_codec_jpeg_src",
+				       "clk_ade_pix",
+				       "clk_syspll_src",
+				       "clk_medpll_src";
+			ade_core_clk_rate = <360000000>;
+			media_noc_clk_rate = <288000000>;
+		};
+
+		dsi: dsi@0xf4107800 {
+			compatible = "hisilicon,hi6220-dsi";
+			reg = <0x0 0xf4107800 0x0 0x100>;
+			clocks = <&media_ctrl  HI6220_DSI_PCLK>;
+			clock-names = "pclk_dsi";
+
+			port {
+				dsi_out: endpoint {
+					remote-endpoint = <&adv_in>;
+				};
+			};
+
+		};
+	};
