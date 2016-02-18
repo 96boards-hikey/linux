@@ -1,0 +1,28 @@
+Hisilicon Hi655x Voltage regulators
+
+Note:
+The hi655x regulator control is managed by hi655x Power IC.
+So the node of this regulator must be child node of hi655x
+PMIC node.
+
+The driver uses the regulator core framework, so please also
+take the bindings of regulator.txt for reference.
+
+The valid names for regulators are:
+
+LDO2 LDO7 LDO10 LDO13 LDO14 LDO15 LDO17 LDO19 LDO21 LDO22
+
+Example:
+        pmic: pmic@f8000000 {
+                compatible = "hisilicon,hi655x-pmic";
+		...
+		regulators {
+			ldo2: LDO2@a21 {
+				regulator-compatible = "LDO2_2V8";
+				regulator-min-microvolt = <2500000>;
+				regulator-max-microvolt = <3200000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+			...
+		}
+	}
