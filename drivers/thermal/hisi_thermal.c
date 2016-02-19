@@ -197,7 +197,7 @@ static int hisi_thermal_get_temp(void *_sensor, int *temp)
 		return 0;
 	}
 
-	if (max_temp < sensor->thres_temp) {
+	if (!data->irq_enabled && max_temp < sensor->thres_temp) {
 		data->irq_enabled = true;
 		hisi_thermal_enable_bind_irq_sensor(data);
 		enable_irq(data->irq);
@@ -343,6 +343,10 @@ static int hisi_thermal_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	hisi_thermal_enable_bind_irq_sensor(data);
+	irq_get_irqchip_state(data->irq, IRQCHIP_STATE_MASKED,
+			      &data->irq_enabled);
+
 	for (i = 0; i < HISI_MAX_SENSORS; ++i) {
 		ret = hisi_thermal_register_sensor(pdev, data,
 						   &data->sensors[i], i);
@@ -352,9 +356,6 @@ static int hisi_thermal_probe(struct platform_device *pdev)
 		else
 			hisi_thermal_toggle_sensor(&data->sensors[i], true);
 	}
-
-	hisi_thermal_enable_bind_irq_sensor(data);
-	data->irq_enabled = true;
 
 	return 0;
 }
