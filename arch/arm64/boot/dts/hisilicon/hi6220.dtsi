@@ -726,8 +726,8 @@
 			clock-names = "apb_pclk";
 			pinctrl-names = "default";
 			pinctrl-0 = <&spi0_pmx_func &spi0_cfg_func>;
-			num-cs = <4>;
-			cs-gpios = <&gpio6 2 0>,<&gpio6 3 0>,<&gpio6 4 0>,<&gpio6 5 0>;
+			num-cs = <1>;
+			cs-gpios = <&gpio6 2 0>;
 
 			status = "ok";
 		};
