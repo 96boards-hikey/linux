@@ -182,6 +182,18 @@
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* Shared memory between secure and non-secure world */
+		optee@0xfee00000 {
+			reg = <0x00000000 0xfee00000 0 0x00200000>;
+		};
+	};
+
+
 	smb {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -210,4 +222,11 @@
 				<0 0 12 &gic 0 0 0 169 IRQ_TYPE_LEVEL_HIGH>;
 
 		/include/ "juno-motherboard.dtsi"
+	};
+
+	firmware {
+		optee {
+			compatible = "linaro,optee-tz";
+			method = "smc";
+		};
 	};

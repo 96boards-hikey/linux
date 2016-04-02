@@ -48,6 +48,13 @@
 		      <0x00000000 0x22000000 0x00000000 0x1c000000>;
 	};
 
+	firmware {
+		optee {
+			compatible = "linaro,optee-tz";
+			method = "smc";
+		};
+	};
+
 	pstore: pstore@0x21f00000 {
 		no-map;
 		reg = <0x0 0x21f00000 0x0 0x00100000>;  /* pstore/ramoops buffer */
