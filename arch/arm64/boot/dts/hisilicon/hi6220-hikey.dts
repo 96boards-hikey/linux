@@ -7,8 +7,6 @@
 
 /dts-v1/;
 
-/memreserve/ 0x00000000 0x07400000;
-
 #include "hikey-pinctrl.dtsi"
 #include "hikey-gpio.dtsi"
 #include "hi6220.dtsi"
@@ -36,36 +34,29 @@
 		linux,initrd-end = <0x0 0x0b600000>;
 	};
 
-	memory {
+	/*
+	 * Reserve below regions from memory node:
+	 *
+	 *  0x05e0,0000 - 0x05ef,ffff: MCU firmware runtime using
+	 *  0x05f0,1000 - 0x05f0,1fff: Reboot reason
+	 *  0x06df,f000 - 0x06df,ffff: Mailbox message data
+	 *  0x0740,f000 - 0x0740,ffff: MCU firmware section
+	 *  0x21f0,0000 - 0x21ff,ffff: pstore/ramoops buffer
+	 *  0x3e00,0000 - 0x3fff,ffff: OP-TEE
+	 */
+	memory@0 {
 		device_type = "memory";
-		reg = <0x0 0x00000000 0x0 0x40000000>;
+		reg = <0x00000000 0x00000000 0x00000000 0x05e00000>,
+		      <0x00000000 0x05f00000 0x00000000 0x00001000>,
+		      <0x00000000 0x05f02000 0x00000000 0x00efd000>,
+		      <0x00000000 0x06e00000 0x00000000 0x0060f000>,
+		      <0x00000000 0x07410000 0x00000000 0x1aaf0000>,
+		      <0x00000000 0x22000000 0x00000000 0x1c000000>;
 	};
 
-	reserved-memory {
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-
-		mcu-buf@05e00000 {
-			no-map;
-			reg = <0x0 0x05e00000 0x0 0x00100000>,	/* MCU firmware buffer */
-			      <0x0 0x0740f000 0x0 0x00001000>;	/* MCU firmware section */
-		};
-
-		reboot-reason@05f01000 {
-			no-map;
-			reg = <0x0 0x05f01000 0x0 0x00001000>;
-		};
-
-		mbox-buf@06dff000 {
-			no-map;
-			reg = <0x0 0x06dff000 0x0 0x00001000>;	/* Mailbox message buf */
-		};
-
-		pstore: pstore@0x21f00000 {
-			no-map;
-			reg = <0x0 0x21f00000 0x0 0x00100000>;  /* pstore/ramoops buffer */
-		};
+	pstore: pstore@0x21f00000 {
+		no-map;
+		reg = <0x0 0x21f00000 0x0 0x00100000>;  /* pstore/ramoops buffer */
 	};
 
 	ramoops {
