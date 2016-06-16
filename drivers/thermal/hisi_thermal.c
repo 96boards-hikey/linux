@@ -259,7 +259,7 @@ static int hisi_thermal_register_sensor(struct platform_device *pdev,
 	if (IS_ERR(sensor->tzd)) {
 		ret = PTR_ERR(sensor->tzd);
 		sensor->tzd = NULL;
-		dev_err(&pdev->dev, "failed to register sensor id %d: %d\n",
+		dev_dbg(&pdev->dev, "failed to register sensor id %d: %d\n",
 			sensor->id, ret);
 		return ret;
 	}
@@ -350,10 +350,7 @@ static int hisi_thermal_probe(struct platform_device *pdev)
 	for (i = 0; i < HISI_MAX_SENSORS; ++i) {
 		ret = hisi_thermal_register_sensor(pdev, data,
 						   &data->sensors[i], i);
-		if (ret)
-			dev_err(&pdev->dev,
-				"failed to register thermal sensor: %d\n", ret);
-		else
+		if (!ret)
 			hisi_thermal_toggle_sensor(&data->sensors[i], true);
 	}
 
