@@ -403,17 +403,10 @@ static int hi6421v530_regulator_enable(struct regulator_dev *rdev)
 
 	pdata = dev_get_drvdata(rdev->dev.parent);
 	mutex_lock(&pdata->lock);
-#if 1 /*temp solution*/
-	unsigned char reg_val = 0;
-	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
 
-	reg_val = (readb(iomem + rdev->desc->enable_reg)) | (rdev->desc->enable_mask);
-	writeb(reg_val, iomem + rdev->desc->enable_reg);
-	iounmap(iomem);
-#else
 	ret = regmap_update_bits(rdev->regmap, rdev->desc->enable_reg,
-		rdev->desc->enable_mask, 0);
-#endif
+		rdev->desc->enable_mask, 1 << (ffs(rdev->desc->enable_mask) - 1));
+
 	mutex_unlock(&pdata->lock);
 	return ret;
 }
@@ -425,17 +418,10 @@ static int hi6421v530_regulator_disable(struct regulator_dev *rdev)
 
 	pdata = dev_get_drvdata(rdev->dev.parent);
 	mutex_lock(&pdata->lock);
-#if 1 /*temp solution*/
-	unsigned char reg_val = 0;
-	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
 
-	reg_val = (readb(iomem + rdev->desc->enable_reg)) & (~(rdev->desc->enable_mask));
-	writeb(reg_val, iomem + rdev->desc->enable_reg);
-	iounmap(iomem);
-#else
 	ret = regmap_update_bits(rdev->regmap, rdev->desc->enable_reg,
 		rdev->desc->enable_mask, 0);
-#endif
+
 	mutex_unlock(&pdata->lock);
 	return ret;
 }
@@ -445,39 +431,23 @@ static int hi6421v530_regulator_is_enabled(struct regulator_dev *rdev)
 	unsigned int reg_val = 0;
 	int ret = 0;
 
-#if 1 /*temp solution*/
-	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
+	regmap_read(rdev->regmap, rdev->desc->enable_reg, &reg_val);
 
-	reg_val = readb(iomem + rdev->desc->enable_reg);
-	iounmap(iomem);
-#else
-	regmap_read(rdev->regmap, pdata->enable_reg, &reg_val);
-#endif
-	ret =  ffs(reg_val & (rdev->desc->enable_mask));
+	ret = (reg_val & (rdev->desc->enable_mask)) ? 1 : 0;
 	return ret;
 }
 
 static int hi6421v530_regulator_set_voltage(struct regulator_dev *rdev, unsigned sel)
 {
 	struct hi6421v530_regulator_pdata *pdata;
-	unsigned int reg_val = 0;
 	int ret = 0;
 
 	pdata = dev_get_drvdata(rdev->dev.parent);
 	mutex_lock(&pdata->lock);
-#if 1 /*temp solution*/
-	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
 
-	reg_val = readb(iomem + rdev->desc->vsel_reg);
-	sel <<= ffs(rdev->desc->vsel_mask) - 1;
-
-	reg_val = (reg_val & (~(rdev->desc->vsel_mask))) + sel;
-	writeb(reg_val, iomem + rdev->desc->vsel_reg);
-	iounmap(iomem);
-#else
 	ret = regmap_update_bits(rdev->regmap, rdev->desc->vsel_reg,
 				  rdev->desc->vsel_mask, sel);
-#endif
+
 	mutex_unlock(&pdata->lock);
 	return ret;
 }
@@ -487,29 +457,21 @@ static int hi6421v530_regulator_get_voltage(struct regulator_dev *rdev)
 	unsigned int reg_val = 0;
 	int voltage;
 
-#if 1 /*temp solution*/
-	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
-	reg_val = (readb(iomem + rdev->desc->vsel_reg)) & (rdev->desc->vsel_mask);
-	iounmap(iomem);
-#else
 	regmap_read(rdev->regmap, rdev->desc->vsel_reg, &reg_val);
-#endif
-	voltage = reg_val >> (ffs(rdev->desc->vsel_mask) - 1);
 
+	voltage = reg_val >> (ffs(rdev->desc->vsel_mask) - 1);
 	return voltage;
 }
 
 static unsigned int hi6421v530_regulator_ldo_get_mode(struct regulator_dev *rdev)
 {
-	struct hi6421v530_regulator_info *info = rdev_get_drvdata(rdev);
+	struct hi6421v530_regulator_info *info;
 	unsigned int reg_val;
-#if 1 /*temp solution*/
-	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
-	reg_val = readb(iomem + rdev->desc->enable_reg);
-#else
+
+	info = rdev_get_drvdata(rdev);
 	regmap_read(rdev->regmap, rdev->desc->enable_reg, &reg_val);
-#endif
-	if (reg_val & info->mode_mask)
+
+	if (reg_val & (info->mode_mask))
 		return REGULATOR_MODE_IDLE;
 
 	return REGULATOR_MODE_NORMAL;
@@ -518,9 +480,12 @@ static unsigned int hi6421v530_regulator_ldo_get_mode(struct regulator_dev *rdev
 static int hi6421v530_regulator_ldo_set_mode(struct regulator_dev *rdev,
 						unsigned int mode)
 {
-	struct hi6421v530_regulator_info *info = rdev_get_drvdata(rdev);
+	struct hi6421v530_regulator_info *info;
+	struct hi6421v530_regulator_pdata *pdata;
 	unsigned int new_mode;
 
+	info = rdev_get_drvdata(rdev);
+	pdata = dev_get_drvdata(rdev->dev.parent);
 	switch (mode) {
 	case REGULATOR_MODE_NORMAL:
 		new_mode = 0;
@@ -532,34 +497,14 @@ static int hi6421v530_regulator_ldo_set_mode(struct regulator_dev *rdev,
 		return -EINVAL;
 	}
 
-#if 1 /*temp solution*/
-	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
-	unsigned int reg_val;
-
-	reg_val = readb(iomem + rdev->desc->enable_reg);
-	new_mode <<= ffs(info->mode_mask) - 1;
-
-	reg_val = (reg_val & (~(info->mode_mask))) + new_mode;
-	writeb(reg_val, iomem + rdev->desc->enable_reg);
-	iounmap(iomem);
-#else
+	mutex_lock(&pdata->lock);
 	regmap_update_bits(rdev->regmap, rdev->desc->enable_reg,
 			   info->mode_mask, new_mode);
-#endif
+	mutex_unlock(&pdata->lock);
+
 	return 0;
 }
 
-
-unsigned int hi6421v530_regulator_ldo_get_optimum_mode(struct regulator_dev *rdev,
-			int input_uV, int output_uV, int load_uA)
-{
-	struct hi6421v530_regulator_info *info = rdev_get_drvdata(rdev);
-
-	if (load_uA > info->eco_microamp)
-		return REGULATOR_MODE_NORMAL;
-
-	return REGULATOR_MODE_IDLE;
-}
 
 static const struct regulator_ops hi6421v530_ldo_ops = {
 	.is_enabled = hi6421v530_regulator_is_enabled,
@@ -571,7 +516,6 @@ static const struct regulator_ops hi6421v530_ldo_ops = {
 	.set_voltage_sel = hi6421v530_regulator_set_voltage,
 	.get_mode = hi6421v530_regulator_ldo_get_mode,
 	.set_mode = hi6421v530_regulator_ldo_set_mode,
-	.get_optimum_mode = hi6421v530_regulator_ldo_get_optimum_mode,
 };
 
 static int hi6421v530_regulator_register(struct platform_device *pdev,

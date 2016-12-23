@@ -66,10 +66,11 @@
 
 		regulators {
 			ldo1: LDO1 {
-				regulator-compatible = "hi6421v530_ldo0_2";
+				regulator-compatible = "hi6421v530_ldo1";
 				regulator-name = "LDO1";
 				regulator-min-microvolt = <1000000>;
 				regulator-max-microvolt = <1500000>;
+				regulator-always-on;
 				regulator-enable-ramp-delay = <120>;
 			};
 
@@ -78,6 +79,7 @@
 				regulator-name = "LDO3";
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <2200000>;
+				regulator-always-on;
 				regulator-enable-ramp-delay = <120>;
 			};
 
@@ -118,12 +120,13 @@
 				regulator-name = "LDO15";
 				regulator-min-microvolt = <1750000>;
 				regulator-max-microvolt = <3000000>;
+				regulator-always-on;
 				regulator-enable-ramp-delay = <120>;
 			};
 
 			ldo16: LDO16 {
 				regulator-compatible = "hi6421v530_ldo16";
-				regulator-name = "ldo16";
+				regulator-name = "LDO16";
 				regulator-min-microvolt = <1750000>;
 				regulator-max-microvolt = <3000000>;
 				regulator-enable-ramp-delay = <360>;

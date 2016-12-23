@@ -169,9 +169,27 @@ static int dw_mci_hs_get_resource(void)
 	return 0;
 }
 
+void sdcard_set_pmic_reg(void)
+{
+	unsigned char data = 0;
+	void __iomem *iomem = ioremap(0xfff34000, 0x1000);
+
+	data = readb(iomem + (0x78 << 2)) | (1 << 1);
+	writeb(data, iomem + (0x78 << 2));
+	data = readb(iomem + (0x79 << 2)) & ~(0x7) | 6;
+	writeb(data, iomem + (0x79 << 2));
+
+	data = readb(iomem + (0x6A << 2)) | (1 << 1);
+	writeb(data, iomem + (0x6A << 2));
+	data = readb(iomem + (0x6B << 2)) & ~(0x7) | 5;
+	writeb(data, iomem + (0x6B << 2));
+	iounmap(iomem);
+}
+
 int dw_mci_hi3660_init(struct dw_mci *host)
 {
 	dw_mci_hs_get_resource();
+	sdcard_set_pmic_reg();
 
 	return 0;
 }

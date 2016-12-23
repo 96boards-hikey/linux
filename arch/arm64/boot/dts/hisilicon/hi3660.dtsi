@@ -974,8 +974,6 @@
 			cd-gpios = <&gpio25 3 0>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&sdcard_pmx_func>;
-			vmmc-supply = <&ldo16>;
-			vqmmc-supply = <&ldo9>;
 			slot@0 {
 				reg = <0x0>;
 				bus-width = <4>;
@@ -1014,7 +1012,7 @@
 			ranges;
 			bc_again_flag = <1>;
 
-			clocks = <&crg_ctrl HI3660_CLK_GATE_ABB_USB>,
+			clocks = <&crg_ctrl HI3660_CLK_ABB_USB>,
 				<&crg_ctrl HI3660_ACLK_GATE_USB3OTG>;
 			clock-names = "clk_usb3phy_ref", "aclk_usb3otg";
 			eye_diagram_param = <0x1c466e3>;

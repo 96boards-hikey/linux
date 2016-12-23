@@ -30,7 +30,7 @@
      *  The default can be overridden if the driver is compiled as a module
      */
 
-#define VIDEOMEMSIZE	(8*1024*1024)	/* 8 MB */
+#define VIDEOMEMSIZE	(1*1024*1024)	/* 1 MB */
 
 static void *videomemory;
 static u_long videomemorysize = VIDEOMEMSIZE;
@@ -90,7 +90,7 @@ static struct fb_var_screeninfo vfb_default = {
 	.yres =		480,
 	.xres_virtual =	640,
 	.yres_virtual =	480,
-	.bits_per_pixel = 32,
+	.bits_per_pixel = 8,
 	.red =		{ 0, 8, 0 },
       	.green =	{ 0, 8, 0 },
       	.blue =		{ 0, 8, 0 },
@@ -505,7 +505,7 @@ static int vfb_probe(struct platform_device *dev)
 	info->fbops = &vfb_ops;
 
 	retval = fb_find_mode(&info->var, info, NULL,
-			      NULL, 0, NULL, 32);
+			      NULL, 0, NULL, 8);
 
 	if (!retval || (retval == 4))
 		info->var = vfb_default;

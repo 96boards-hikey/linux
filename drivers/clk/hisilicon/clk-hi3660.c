@@ -55,6 +55,7 @@ static const struct hisi_fixed_factor_clock hi3660_crg_fixed_factor_clks[] = {
 	{ HI3660_CLK_GATE_SPI0, "clk_gate_spi0", "clk_ppll0", 1, 8, 0, },
 	{ HI3660_CLK_GATE_SPI2, "clk_gate_spi2", "clk_ppll0", 1, 8, 0, },
 	{ HI3660_PCIEPHY_REF, "clk_pciephy_ref", "clk_div_pciephy", 1, 1, 0, },
+	{ HI3660_CLK_ABB_USB, "clk_abb_usb", "clk_gate_usb_tcxo_en", 1, 1, 0 },
 };
 
 static const struct hisi_gate_clock hi3660_crgctrl_gate_sep_clks[] = {
@@ -170,8 +171,6 @@ static const struct hisi_gate_clock hi3660_crgctrl_gate_sep_clks[] = {
 	  CLK_SET_RATE_PARENT, 0x420, 8, 0, },
 	{ HI3660_PCLK_GATE_PCIE_PHY, "pclk_gate_pcie_phy", "clk_div_mmc1bus",
 	  CLK_SET_RATE_PARENT, 0x420, 9, 0, },
-	{ HI3660_CLK_GATE_ABB_USB, "clk_gate_abb_usb", "clk_gate_usb_tcxo_en",
-	  CLK_SET_RATE_PARENT, 0x10, 0, 0, },
 };
 
 static const struct hisi_gate_clock hi3660_crgctrl_gate_clks[] = {
@@ -349,13 +348,13 @@ static const struct hisi_divider_clock hi3660_crgctrl_divider_clks[] = {
 /* clk_pmuctrl */
 /* pmu register need shift 2 bits */
 static const struct hisi_gate_clock hi3660_pmu_gate_clks[] = {
-	{ HI3660_CLK_GATE_ABB_192, "clk_gate_abb_192", "clkin_sys",
+	{ HI3660_GATE_ABB_192, "clk_gate_abb_192", "clkin_sys",
 	  CLK_SET_RATE_PARENT, (0x10a << 2), 3, 0, },
 };
 
 /* clk_pctrl */
 static const struct hisi_gate_clock hi3660_pctrl_gate_clks[] = {
-	{ HI3660_CLK_GATE_UFS_TCXO_EN, "clk_gate_ufs_tcxo_en",
+	{ HI3660_GATE_UFS_TCXO_EN, "clk_gate_ufs_tcxo_en",
 	  "clk_gate_abb_192", CLK_SET_RATE_PARENT, 0x10, 0,
 	  CLK_GATE_HIWORD_MASK, },
 	{ HI3660_GATE_USB_TCXO_EN, "clk_gate_usb_tcxo_en", "clk_gate_abb_192",
