@@ -48,6 +48,15 @@
 					0x120 MUX_M0 /* GPIO_074 (IOMG_072) */
 				>;
 			};
+
+			spi1_pmx_func: spi1_pmx_func {
+				pinctrl-single,pins = <
+					0x034 MUX_M1 /* SPI1_CLK  (IOMG_013) */
+					0x038 MUX_M1 /* SPI1_DI   (IOMG_014) */
+					0x03C MUX_M1 /* SPI1_DO   (IOMG_015) */
+					0x040 MUX_M1 /* SPI1_CS_N (IOMG_016) */
+				>;
+			};
 		};
 
 		/* [IOMG_MMC0_000, IOMG_MMC0_005] */
@@ -81,6 +90,15 @@
 			pinctrl-single,function-mask = <0x7>;
 			/* pin base, nr pins & gpio function */
 			pinctrl-single,gpio-range = <&range 0 12 0>;
+
+			spi3_pmx_func: spi3_pmx_func {
+				pinctrl-single,pins = <
+					0x008 MUX_M1 /* SPI3_CLK   (IOMG_FIX_002) */
+					0x00C MUX_M1 /* SPI3_DI    (IOMG_FIX_003) */
+					0x010 MUX_M1 /* SPI3_DO    (IOMG_FIX_004) */
+					0x014 MUX_M1 /* SPI3_CS0_N (IOMG_FIX_005) */
+				>;
+			};
 		};
 
 		/* [IOMG_MMC1_000, IOMG_MMC1_005] */
@@ -139,6 +157,15 @@
 				pinctrl-single,pins = <
 					0x024 MUX_M3 /* I2C7_SCL (IOMG_AO_009) */
 					0x028 MUX_M3 /* I2C7_SDA (IOMG_AO_010) */
+				>;
+			};
+
+			spi4_pmx_func: spi4_pmx_func {
+				pinctrl-single,pins = <
+					0x08C MUX_M4 /* SPI4_CLK (IOMG_AO_035) */
+					0x090 MUX_M4 /* SPI4_DI  (IOMG_AO_036) */
+					0x094 MUX_M4 /* SPI4_DO  (IOMG_AO_037) */
+					0x098 MUX_M4 /* SPI4_CS0_N (IOMG_AO_038)*/
 				>;
 			};
 		};
