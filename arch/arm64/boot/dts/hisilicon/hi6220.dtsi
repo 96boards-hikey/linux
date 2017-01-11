@@ -336,9 +336,9 @@
 			compatible = "hisilicon,k3-dma-1.0";
 			reg = <0x0 0xf7370000 0x0 0x1000>;
 			#dma-cells = <1>;
-			dma-channels = <15>;
+			dma-channels = <16>;
 			dma-requests = <32>;
-			interrupts = <0 84 4>;
+			interrupts = <0 81 4>;
 			clocks = <&sys_ctrl HI6220_EDMAC_ACLK>;
 			dma-no-cci;
 			dma-type = "hi6220_dma";
@@ -693,7 +693,7 @@
 			interrupts = <0 50 4>;
 			bus-id = <0>;
 			enable-dma = <1>;
-			dmas =  <&dma0 12 &dma0 13>;
+			dmas =  <&dma0 0 &dma0 1>;
 			dma-names = "rx", "tx";
 			clocks = <&sys_ctrl HI6220_SPI_CLK>;
 			clock-names = "apb_pclk";
