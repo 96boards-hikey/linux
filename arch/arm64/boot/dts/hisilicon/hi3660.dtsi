@@ -543,6 +543,51 @@
 			status = "disabled";
 		};
 
+		spi1: spi@fdf08000 {
+			compatible = "arm,pl022", "arm,primecell";
+			reg = <0x0 0xfdf08000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <0 80 4>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_SPI1>;
+			clock-names = "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi1_pmx_func>;
+			num-cs = <1>;
+			cs-gpios = <&gpio2 2 0>;
+			status = "disabled";
+		};
+
+		spi3: spi@ff3b3000 {
+			compatible = "arm,pl022", "arm,primecell";
+			reg = <0x0 0xff3b3000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <0 312 4>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_SPI3>;
+			clock-names = "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi3_pmx_func>;
+			num-cs = <1>;
+			cs-gpios = <&gpio18 5 0>;
+			status = "disabled";
+		};
+
+		spi4: spi@fdf06000 {
+			compatible = "arm,pl022", "arm,primecell";
+			reg = <0x0 0xfdf06000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <0 313 4>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_SPI4>;
+			clock-names = "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi4_pmx_func>;
+			num-cs = <1>;
+			cs-gpios = <&gpio27 2 0>;
+			status = "disabled";
+		};
+
 		gpio0: gpio@e8a0b000 {
 			compatible = "arm,pl061", "arm,primecell", "arm,primecell0";
 			reg = <0 0xe8a0b000 0 0x1000>;
