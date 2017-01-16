@@ -5,6 +5,7 @@
  */
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/hi3660-clock.h>
 
 / {
 	compatible = "hisilicon,hi3660";
@@ -137,18 +138,146 @@
 		#size-cells = <2>;
 		ranges;
 
-		fixed_uart5: fixed_19_2M {
-			compatible = "fixed-clock";
-			#clock-cells = <0>;
-			clock-frequency = <19200000>;
-			clock-output-names = "fixed:uart5";
+		crg_ctrl: crg_ctrl@fff35000 {
+			compatible = "hisilicon,hi3660-crgctrl", "syscon";
+			reg = <0x0 0xfff35000 0x0 0x1000>;
+			#clock-cells = <1>;
 		};
 
-		uart5: uart@fdf05000 {
+		crg_rst: crg_rst_controller {
+			compatible = "hisilicon,hi3660-reset";
+			#reset-cells = <2>;
+			hisi,rst-syscon = <&crg_ctrl>;
+		};
+
+
+		pctrl: pctrl@e8a09000 {
+			compatible = "hisilicon,hi3660-pctrl", "syscon";
+			reg = <0x0 0xe8a09000 0x0 0x2000>;
+			#clock-cells = <1>;
+		};
+
+		pmuctrl: crg_ctrl@fff34000 {
+			compatible = "hisilicon,hi3660-pmuctrl", "syscon";
+			reg = <0x0 0xfff34000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		sctrl: sctrl@fff0a000 {
+			compatible = "hisilicon,hi3660-sctrl", "syscon";
+			reg = <0x0 0xfff0a000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		iomcu: iomcu@ffd7e000 {
+			compatible = "hisilicon,hi3660-iomcu", "syscon";
+			reg = <0x0 0xffd7e000 0x0 0x1000>;
+			#clock-cells = <1>;
+
+		};
+
+		iomcu_rst: reset {
+			compatible = "hisilicon,hi3660-reset";
+			hisi,rst-syscon = <&iomcu>;
+			#reset-cells = <2>;
+		};
+
+		i2c0: i2c@FFD71000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xFFD71000 0x0 0x1000>;
+			interrupts = <0 118 4>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_I2C0>;
+			resets = <&iomcu_rst 0x20 3>;
+			status = "disabled";
+		};
+
+		i2c1: i2c@FFD72000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xFFD72000 0x0 0x1000>;
+			interrupts = <0 119 4>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_I2C1>;
+			resets = <&iomcu_rst 0x20 4>;
+			status = "disabled";
+
+			adv7533: adv7533@39 {
+				status = "ok";
+				compatible = "adi,adv7533";
+				reg = <0x39>;
+			};
+		};
+
+		i2c2: i2c@FFD73000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xFFD73000 0x0 0x1000>;
+			interrupts = <0 120 4>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_I2C2>;
+			resets = <&iomcu_rst 0x20 5>;
+			status = "disabled";
+		};
+
+		i2c3: i2c@FDF0C000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xFDF0C000 0x0 0x1000>;
+			interrupts = <0 81 4>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_I2C3>;
+			resets = <&crg_rst 0x78 7>;
+			status = "disabled";
+		};
+
+		i2c4: i2c@FDF0D000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xFDF0D000 0x0 0x1000>;
+			interrupts = <0 82 4>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_I2C4>;
+			resets = <&crg_rst 0x78 27>;
+			status = "disabled";
+		};
+
+		i2c6: i2c@FFD6A000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xFFD6A000 0x0 0x1000>;
+			interrupts = <0 117 4>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_I2C6>;
+			resets = <&iomcu_rst 0x20 27>;
+			status = "disabled";
+		};
+
+		i2c7: i2c@FDF0B000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xFDF0B000 0x0 0x1000>;
+			interrupts = <0 314 4>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_I2C7>;
+			resets = <&crg_rst 0x60 14>;
+			status = "disabled";
+		};
+
+		uart5: serial@fdf05000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x0 0xfdf05000 0x0 0x1000>;
 			interrupts = <GIC_SPI 78 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&fixed_uart5 &fixed_uart5>;
+			clocks = <&crg_ctrl HI3660_CLK_GATE_UART5>,
+				 <&crg_ctrl HI3660_CLK_GATE_UART5>;
 			clock-names = "uartclk", "apb_pclk";
 			status = "ok";
 		};

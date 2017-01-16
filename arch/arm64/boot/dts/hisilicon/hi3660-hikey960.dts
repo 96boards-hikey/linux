@@ -30,7 +30,7 @@
 	};
 
 	soc {
-		uart5: uart@fdf05000 {
+		uart5: serial@fdf05000 {
 			status = "ok";
 		};
 	};
