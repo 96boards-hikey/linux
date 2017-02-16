@@ -1,0 +1,63 @@
+Received: from szxga01-in.huawei.com (unknown [58.251.152.64])
+	by newmx104.qq.com (NewMx) with SMTP id 
+	for <puck.chen@foxmail.com>; Fri, 16 Dec 2016 15:55:10 +0800
+X-QQ-FEAT: lRjdLcu6z5qzB+893tncnXgMJLzMUIaEA7nzIPS4OQ7Y7HeJi+udZPIeOJX5/
+	SmIqB1GlgfDTkAK+WkfN6KS8BBbsAwqjtI8xKOZPmf6nc5+w/mlawQ4mWxTGHcG6u9Rp3WO
+	kzDmmc+y/6VZSw71iVPu4YjFl+2pB8eWvERFQv2J4oqPO6Aku9Ev/HynsQJJ1DV64N80YvD
+	L1YXE4I2w86NC7Jk1RpVB6Vg5J2hWNB4MQtrr7gKfpQ4n00iUBnsKKjG05SsIbiXc7Ol4fe
+	t8jcNoz1i3bk7M
+X-QQ-MAILINFO: MjJD59SVx+LnGamu5UIkIxLEj1DX0FaHEvVtkdl6JGNgPX15wO+aLTIO4
+	0sOSIsE1GQIWHx7+hdntwm316XM54BgkWTrmog4eVXfyolvstJmfyjD3WUNQsvuf6bjrYMO
+	6n0x/mYo0XB3OYtgaqiDBMw=
+X-QQ-mid: mx104t1481874915tleq1rk81
+X-QQ-ORGSender: puck.chen@hisilicon.com
+Received: from 172.24.1.136 (EHLO SZXEML423-HUB.china.huawei.com) ([172.24.1.136])
+	by szxrg01-dlp.huawei.com (MOS 4.3.7-GA FastPath queued)
+	with ESMTP id DWN32994;
+	Fri, 16 Dec 2016 15:50:38 +0800 (CST)
+Received: from vm163-62.huawei.com (10.184.163.62) by
+ SZXEML423-HUB.china.huawei.com (10.82.67.154) with Microsoft SMTP Server id
+ 14.3.235.1; Fri, 16 Dec 2016 15:50:28 +0800
+From: Chen Feng <puck.chen@hisilicon.com>
+To: <puck.chen@hisilicon.com>, <xuwei5@hisilicon.com>, <robh+dt@kernel.org>,
+        <mark.rutland@arm.com>, <devicetree@vger.kernel.org>,
+        <linux-kernel@vger.kernel.org>, <xuyiping@hisilicon.com>
+CC: <suzhuangluan@hisilicon.com>, <haojian.zhuang@linaro.org>,
+        <guodong.xu@linaro.org>, <dan.zhao@hisilicon.com>,
+        <saberlily.xia@hisilicon.com>, <puck.chen@foxmail.com>,
+        <oliver.fu@hisilicon.com>, <xuhongtao8@hisilicon.com>
+Subject: [PATCH 1/2] document: dt: add binding for Hi3660 SoC
+Date: Fri, 16 Dec 2016 15:50:26 +0800
+Message-ID: <1481874627-79760-1-git-send-email-puck.chen@hisilicon.com>
+X-Mailer: git-send-email 1.9.1
+MIME-Version: 1.0
+Content-Type: text/plain
+X-Originating-IP: [10.184.163.62]
+X-CFilter-Loop: Reflected
+
+Add binding for hisilicon Hi3660 SoC and HiKey960 Board.
+
+Signed-off-by: Chen Feng <puck.chen@hisilicon.com>
+---
+ Documentation/devicetree/bindings/arm/hisilicon/hisilicon.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/arm/hisilicon/hisilicon.txt b/Documentation/devicetree/bindings/arm/hisilicon/hisilicon.txt
+index 3f81575..7cf2847 100644
+--- a/Documentation/devicetree/bindings/arm/hisilicon/hisilicon.txt
++++ b/Documentation/devicetree/bindings/arm/hisilicon/hisilicon.txt
+@@ -8,6 +8,10 @@ Hi6220 SoC
+ Required root node properties:
+ 	- compatible = "hisilicon,hi6220";
+ 
++Hi3660 SoC
++Required root node properties:
++	- compatible = "hisilicon,hi3660";
++
+ HiKey Board
+ Required root node properties:
+ 	- compatible = "hisilicon,hi6220-hikey", "hisilicon,hi6220";
+-- 
+1.9.1
+
+
