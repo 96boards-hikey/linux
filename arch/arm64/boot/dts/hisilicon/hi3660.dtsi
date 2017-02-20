@@ -562,6 +562,14 @@
 			status = "disabled";
 		};
 
+		rtc0: rtc@fff04000 {
+			compatible = "arm,pl031", "arm,primecell";
+			reg = <0x0 0Xfff04000 0x0 0x1000>;
+			interrupts = <GIC_SPI 46 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&crg_ctrl HI3660_PCLK>;
+			clock-names = "apb_pclk";
+		};
+
 		spi1: spi@fdf08000 {
 			compatible = "arm,pl022", "arm,primecell";
 			reg = <0x0 0xfdf08000 0x0 0x1000>;
