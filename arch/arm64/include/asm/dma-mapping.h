@@ -25,7 +25,7 @@
 #include <asm/xen/hypervisor.h>
 
 #define DMA_ERROR_CODE	(~(dma_addr_t)0)
-extern struct dma_map_ops dummy_dma_ops;
+extern struct dma_map_ops *dma_ops;
 
 static inline struct dma_map_ops *__generic_dma_ops(struct device *dev)
 {
@@ -36,7 +36,7 @@ static inline struct dma_map_ops *__generic_dma_ops(struct device *dev)
 	 * We expect no ISA devices, and all other DMA masters are expected to
 	 * have someone call arch_setup_dma_ops at device creation time.
 	 */
-	return &dummy_dma_ops;
+	return dma_ops;
 }
 
 static inline struct dma_map_ops *get_dma_ops(struct device *dev)
