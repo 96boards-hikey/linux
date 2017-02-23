@@ -227,7 +227,4 @@ int ion_change_flags(struct ion_client *client,
  */
 struct ion_handle *ion_import_dma_buf(struct ion_client *client, int fd);
 
-int ion_sync_for_cpu(struct ion_client *client, int fd);
-int ion_sync_for_device(struct ion_client *client, int fd);
-
 #endif /* _LINUX_ION_H */

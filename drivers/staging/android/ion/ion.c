@@ -23,9 +23,6 @@
 #include <linux/anon_inodes.h>
 #include <linux/kthread.h>
 #include <linux/list.h>
-#include <asm/cacheflush.h>
-#include <asm/cpu.h>
-#include <asm/cputype.h>
 #include <linux/memblock.h>
 #include <linux/miscdevice.h>
 #include <linux/export.h>
@@ -155,42 +152,6 @@ static inline void ion_buffer_page_clean(struct page **page)
 	*page = (struct page *)((unsigned long)(*page) & ~(1UL));
 }
 
-static inline void artemis_flush_cache(unsigned int level)
-{
-	asm volatile("msr s1_1_c15_c14_0, %0" : : "r" (level));
-	asm volatile("dsb sy");
-	asm volatile("isb");
-}
-
-static inline void artemis_flush_cache_all(void)
-{
-	artemis_flush_cache(0); /*flush L1 cache*/
-
-	artemis_flush_cache(2); /*flush l2 cache*/
-}
-
-#define ARM_CPU_PART_CORTEX_ARTEMIS 0xD09
-
-static void hisi_ion_flush_cache_all(void *dummy)
-{
-	unsigned int midr = read_cpuid_id();
-
-	if (MIDR_PARTNUM(midr) == ARM_CPU_PART_CORTEX_ARTEMIS)
-		artemis_flush_cache_all();
-	else
-		flush_cache_all();
-}
-
-static void ion_flush_cache(void)
-{
-	int cpu;
-	cpumask_t mask;
-	for_each_online_cpu(cpu) {
-			cpumask_set_cpu(cpu, &mask);
-	}
-	on_each_cpu(hisi_ion_flush_cache_all, NULL, 1);
-}
-
 /* this function should only be called while dev->lock is held */
 static void ion_buffer_add(struct ion_device *dev,
 			   struct ion_buffer *buffer)
@@ -301,10 +262,6 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 		sg_dma_address(sg) = sg_phys(sg);
 		sg_dma_len(sg) = sg->length;
 	}
-
-	dma_sync_sg_for_device(NULL, table->sgl, table->nents, DMA_BIDIRECTIONAL);
-	dma_sync_sg_for_cpu(NULL, table->sgl, table->nents, DMA_FROM_DEVICE);
-	ion_flush_cache();
 	mutex_lock(&dev->buffer_lock);
 	ion_buffer_add(dev, buffer);
 	mutex_unlock(&dev->buffer_lock);
@@ -1428,7 +1385,7 @@ end:
 }
 EXPORT_SYMBOL(ion_import_dma_buf);
 
-int ion_sync_for_device(struct ion_client *client, int fd)
+static int ion_sync_for_device(struct ion_client *client, int fd)
 {
 	struct dma_buf *dmabuf;
 	struct ion_buffer *buffer;
@@ -1446,7 +1403,6 @@ int ion_sync_for_device(struct ion_client *client, int fd)
 	}
 	buffer = dmabuf->priv;
 
-	ion_flush_cache();
 	dma_sync_sg_for_device(NULL, buffer->sg_table->sgl,
 			       buffer->sg_table->nents, DMA_BIDIRECTIONAL);
 	dma_buf_put(dmabuf);
@@ -1486,7 +1442,6 @@ int ion_sync_for_cpu(struct ion_client *client, int fd)
 	}
 	buffer = dmabuf->priv;
 
-	/*ion_flush_cache();*/
 	if (buffer->cpudraw_sg_table) {
 		dma_sync_sg_for_cpu(NULL,
 				buffer->cpudraw_sg_table->sgl,
