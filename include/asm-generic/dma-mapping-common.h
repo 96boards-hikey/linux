@@ -332,14 +332,13 @@ static inline int dma_supported(struct device *dev, u64 mask)
 {
 	struct dma_map_ops *ops = get_dma_ops(dev);
 
-	if (!ops){
+	if (!ops)
 		return 0;
-    }
-	if (!ops->dma_supported){
+
+	if (!ops->dma_supported)
 		return 1;
-    }
-    int ret = ops->dma_supported(dev, mask);
-    return ret;
+
+	return ops->dma_supported(dev, mask);
 }
 #endif
 
