@@ -1062,7 +1062,7 @@
 			cd-gpios = <&gpio25 3 0>;
 			hisilicon,peripheral-syscon = <&sctrl>;
 			pinctrl-names = "default";
-			pinctrl-0 = <&sdcard_pmx_func>;
+			pinctrl-0 = <&sd_pmx_func &sd_clk_cfg_func &sd_cfg_func>;
 			vmmc-supply = <&ldo16>;
 			vqmmc-supply = <&ldo9>;
 			sd-uhs-sdr12;
@@ -1090,8 +1090,7 @@
 			supports-highspeed;
 			keep-power-in-suspend;
 			pinctrl-names = "default";
-			pinctrl-0 = <>;
-			pinctrl-1 = <>;
+			pinctrl-0 = <&sdio_pmx_func &sdio_clk_cfg_func &sdio_cfg_func>;
 			status = "disabled";
 		};
 

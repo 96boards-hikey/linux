@@ -149,7 +149,7 @@
 			/* pin base, nr pins & gpio function */
 			pinctrl-single,gpio-range = <&range 0 6 0>;
 
-			sdcard_pmx_func: sdcard_pmx_func {
+			sd_pmx_func: sd_pmx_func {
 				pinctrl-single,pins = <
 					0x000 MUX_M1 /* SD_CLK */
 					0x004 MUX_M1 /* SD_CMD */

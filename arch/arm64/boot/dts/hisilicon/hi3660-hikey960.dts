@@ -199,7 +199,7 @@
 	kim {
 		compatible = "kim";
 		pinctrl-names = "default";
-		pinctrl-0 = <>; /* FIXME: add BT PCM pinctrl here */
+		pinctrl-0 = <&uart4_pmx_func &i2s0_pmx_func &uart4_cfg_func &i2s0_cfg_func>;
 		/*
 		 * FIXME: The following is complete CRAP since
 		 * the vendor driver doesn't follow the gpio
