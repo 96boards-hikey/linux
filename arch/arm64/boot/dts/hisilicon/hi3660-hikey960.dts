@@ -35,6 +35,39 @@
 		reg = <0x0 0x00400000 0x0 0xBFE00000>;
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		fastboot_cma: fastboot-cma-mem {
+			reg = <0x0 0x16c00000 0x0 0x4000000>;
+			compatible = "shared-dma-pool";
+			hisi,cma-sec;
+			reusable;
+		};
+
+		bl31: bl31 {
+			reg = <0x0 0x20200000 0x0 0x200000>;
+			no-map;
+		};
+
+		ramoops_ram: pstore-mem {
+			reg = <0x0 0x20A00000 0x0 0x100000>;
+			no-map;
+		};
+
+		lpmx_core: lpmx-core {
+			reg = <0x0 0x89280000 0x0 0x100000>;
+			no-map;
+		};
+
+		lpmcu: lpmcu {
+			reg = <0x0 0x89380000 0x0 0x40000>;
+			no-map;
+		};
+	};
+
 	soc {
 		uart5: serial@fdf05000 {
 			status = "ok";
