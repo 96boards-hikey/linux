@@ -522,10 +522,9 @@ static void hi3660_clk_crgctrl_init(struct device_node *np)
 				  ARRAY_SIZE(hi3660_crgctrl_divider_clks),
 				  clk_data);
 }
+CLK_OF_DECLARE(hi6220_clk_crg, "hisilicon,hi3660-crgctrl", hi3660_clk_crgctrl_init);
 
 static const struct of_device_id hi3660_clk_match_table[] = {
-	{ .compatible = "hisilicon,hi3660-crgctrl",
-	  .data = hi3660_clk_crgctrl_init },
 	{ .compatible = "hisilicon,hi3660-pctrl",
 	  .data = hi3660_clk_pctrl_init },
 	{ .compatible = "hisilicon,hi3660-pmuctrl",
