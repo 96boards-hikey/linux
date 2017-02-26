@@ -227,6 +227,14 @@
 			clock-names = "timer1", "timer2", "apb_pclk";
 		};
 
+		mailbox: mailbox@e896b000 {
+			compatible = "hisilicon,hi3660-mbox";
+			reg = <0x0 0xe896b000 0x0 0x1000>;
+			interrupts = <0x0 0xc0 0x4>,
+				     <0x0 0xc1 0x4>;
+			#mbox-cells = <3>;
+		};
+
                 ufs: ufs@ff3b0000 {
                         compatible = "jedec,ufs-1.1", "hisilicon,hi3660-ufs";
                         reg = <0x0 0xff3b0000 0x0 0x1000>,      /* 0: HCI standard */
