@@ -78,6 +78,12 @@ config STI_MBOX
 	  Mailbox implementation for STMicroelectonics family chips with
 	  hardware for interprocessor communication.
 
+config HI3660_MBOX
+	tristate "Hi3660 Mailbox"
+	depends on ARCH_HISI
+	help
+	  Mailbox implementation for Hi3660.
+
 config MAILBOX_TEST
 	tristate "Mailbox Test Client"
 	depends on OF
