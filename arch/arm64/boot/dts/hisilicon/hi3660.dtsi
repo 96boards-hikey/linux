@@ -235,6 +235,13 @@
 			#mbox-cells = <3>;
 		};
 
+		stub_clock: stub_clock {
+			compatible = "hisilicon,hi3660-stub-clk";
+			#clock-cells = <1>;
+			mbox-names = "mbox-tx";
+			mboxes = <&mailbox 13 3 0>;
+		};
+
                 ufs: ufs@ff3b0000 {
                         compatible = "jedec,ufs-1.1", "hisilicon,hi3660-ufs";
                         reg = <0x0 0xff3b0000 0x0 0x1000>,      /* 0: HCI standard */
