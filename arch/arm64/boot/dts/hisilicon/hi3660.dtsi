@@ -266,6 +266,14 @@
 			reboot-offset = <0x4>;
 		};
 
+		mailbox: mailbox@e896b000 {
+			compatible = "hisilicon,hi3660-mbox";
+			reg = <0x0 0xe896b000 0x0 0x1000>;
+			interrupts = <0x0 0xc0 0x4>,
+			<0x0 0xc1 0x4>;
+			#mbox-cells = <3>;
+		};
+
 		timer0: timer@fff14000 {
 			compatible = "arm,sp804", "arm,primecell";
 			reg = <0x0 0xfff14000 0x0 0x1000>;
