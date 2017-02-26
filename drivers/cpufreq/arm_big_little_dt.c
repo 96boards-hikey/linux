@@ -103,9 +103,24 @@ static int generic_bL_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_HISI_CPUFREQ
+#ifdef CONFIG_OF
+static const struct of_device_id generic_bL_cpufreq[] = {
+	{ .compatible = "arm,generic-bL-cpufreq" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, generic_bL_cpufreq);
+#endif
+#endif
+
 static struct platform_driver generic_bL_platdrv = {
 	.driver = {
 		.name	= "arm-bL-cpufreq-dt",
+#ifdef CONFIG_HISI_CPUFREQ
+#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(generic_bL_cpufreq),
+#endif
+#endif
 	},
 	.probe		= generic_bL_probe,
 	.remove		= generic_bL_remove,
