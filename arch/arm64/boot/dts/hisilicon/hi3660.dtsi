@@ -59,6 +59,9 @@
 			reg = <0x0 0x0>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER0>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster0_opp>;
 		};
 
 		cpu1: cpu@1 {
@@ -67,6 +70,9 @@
 			reg = <0x0 0x1>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER0>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster0_opp>;
 		};
 
 		cpu2: cpu@2 {
@@ -75,6 +81,9 @@
 			reg = <0x0 0x2>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER0>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster0_opp>;
 		};
 
 		cpu3: cpu@3 {
@@ -83,6 +92,9 @@
 			reg = <0x0 0x3>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER0>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster0_opp>;
 		};
 
 		cpu4: cpu@100 {
@@ -91,6 +103,9 @@
 			reg = <0x0 0x100>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_NAP_0 &CPU_SLEEP_0 &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER1>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster1_opp>;
 		};
 
 		cpu5: cpu@101 {
@@ -99,6 +114,9 @@
 			reg = <0x0 0x101>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_NAP_0 &CPU_SLEEP_0 &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER1>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster1_opp>;
 		};
 
 		cpu6: cpu@102 {
@@ -107,6 +125,9 @@
 			reg = <0x0 0x102>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_NAP_0 &CPU_SLEEP_0 &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER1>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster1_opp>;
 		};
 
 		cpu7: cpu@103 {
@@ -115,6 +136,9 @@
 			reg = <0x0 0x103>;
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_NAP_0 &CPU_SLEEP_0 &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock HI3660_CLK_STUB_CLUSTER1>;
+			clock-names = "cpu";
+			operating-points-v2 = <&cluster1_opp>;
 		};
 
 		idle-states {
@@ -155,6 +179,76 @@
 				min-residency-us = <20000>;
 				local-timer-stop;
 			};
+		};
+	};
+
+	cluster0_opp: opp_table0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp00 {
+			opp-hz = /bits/ 64 <533000000>;
+			opp-microvolt = <700000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp01 {
+			opp-hz = /bits/ 64 <999000000>;
+			opp-microvolt = <800000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp02 {
+			opp-hz = /bits/ 64 <1402000000>;
+			opp-microvolt = <900000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp03 {
+			opp-hz = /bits/ 64 <1709000000>;
+			opp-microvolt = <1000000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp04 {
+			opp-hz = /bits/ 64 <1844000000>;
+			opp-microvolt = <1100000>;
+			clock-latency-ns = <300000>;
+		};
+	};
+
+	cluster1_opp: opp_table1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp10 {
+			opp-hz = /bits/ 64 <903000000>;
+			opp-microvolt = <700000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp11 {
+			opp-hz = /bits/ 64 <1421000000>;
+			opp-microvolt = <800000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp12 {
+			opp-hz = /bits/ 64 <1805000000>;
+			opp-microvolt = <900000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp13 {
+			opp-hz = /bits/ 64 <2112000000>;
+			opp-microvolt = <1000000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp14 {
+			opp-hz = /bits/ 64 <2362000000>;
+			opp-microvolt = <1100000>;
+			clock-latency-ns = <300000>;
 		};
 	};
 
