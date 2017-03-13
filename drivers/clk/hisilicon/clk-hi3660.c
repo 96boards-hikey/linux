@@ -556,10 +556,9 @@ static void hi3660_clk_crgctrl_init(struct device_node *np)
 				  ARRAY_SIZE(hi3660_crgctrl_divider_clks),
 				  clk_data);
 }
+CLK_OF_DECLARE(hi6220_clk_crg, "hisilicon,hi3660-crgctrl", hi3660_clk_crgctrl_init);
 
 static const struct of_device_id hi3660_clk_match_table[] = {
-	{ .compatible = "hisilicon,hi3660-crgctrl",
-	  .data = (void *)HI3660_CRGCTRL },
 	{ .compatible = "hisilicon,hi3660-pctrl",
 	  .data = (void *)HI3660_PCTRL },
 	{ .compatible = "hisilicon,hi3660-pmuctrl",
@@ -586,9 +585,6 @@ static int hi3660_clk_probe(struct platform_device *pdev)
 	type = (enum hi3660_clk_type)of_id->data;
 
 	switch (type) {
-	case HI3660_CRGCTRL:
-		hi3660_clk_crgctrl_init(np);
-		break;
 	case HI3660_PCTRL:
 		hi3660_clk_pctrl_init(np);
 		break;
