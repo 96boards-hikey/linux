@@ -1188,6 +1188,8 @@ static int cpufreq_online(unsigned int cpu)
 
 	if (cpufreq_driver->get && !cpufreq_driver->setpolicy) {
 		policy->cur = cpufreq_driver->get(policy->cpu);
+		if (!policy->cur)
+			policy->cur = 100000;
 		if (!policy->cur) {
 			pr_err("%s: ->get() failed\n", __func__);
 			goto out_exit_policy;

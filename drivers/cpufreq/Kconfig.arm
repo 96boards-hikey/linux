@@ -255,3 +255,11 @@ config ACPI_CPPC_CPUFREQ
 	  support for its operation.
 
 	  If in doubt, say N.
+
+config HISI_CPUFREQ
+	bool "Hisilicon Specific CPUFreq Flow for Fix Linaro Bugs"
+	depends on ARM_BIG_LITTLE_CPUFREQ
+	default n
+	help
+	  This adds the Specific CpuFreq Flow for Hisilicon SMP
+	  and Big-little Platform.

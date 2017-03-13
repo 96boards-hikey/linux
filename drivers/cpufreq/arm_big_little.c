@@ -55,6 +55,14 @@ static bool bL_switching_enabled;
 #define ACTUAL_FREQ(cluster, freq)  ((cluster == A7_CLUSTER) ? freq << 1 : freq)
 #define VIRT_FREQ(cluster, freq)    ((cluster == A7_CLUSTER) ? freq >> 1 : freq)
 
+#ifdef CONFIG_ARCH_HISI_MAXFREQ
+extern void of_target_cpu(int cluster, struct device *cpu_dev);
+#endif
+
+#ifdef CONFIG_HISI_CPUFREQ
+static DEFINE_PER_CPU(bool, opp_initialized);
+#endif
+
 static struct cpufreq_arm_bL_ops *arm_bL_ops;
 static struct clk *clk[MAX_CLUSTERS];
 static struct cpufreq_frequency_table *freq_table[MAX_CLUSTERS + 1];
@@ -307,6 +315,9 @@ static void _put_cluster_clk_and_freq_table(struct device *cpu_dev)
 	dev_pm_opp_free_cpufreq_table(cpu_dev, &freq_table[cluster]);
 	if (arm_bL_ops->free_opp_table)
 		arm_bL_ops->free_opp_table(cpu_dev);
+#ifdef CONFIG_HISI_CPUFREQ
+	per_cpu(opp_initialized, cpu_dev->id) = false;
+#endif
 	dev_dbg(cpu_dev, "%s: cluster: %d\n", __func__, cluster);
 }
 
@@ -338,17 +349,35 @@ static void put_cluster_clk_and_freq_table(struct device *cpu_dev)
 static int _get_cluster_clk_and_freq_table(struct device *cpu_dev)
 {
 	u32 cluster = raw_cpu_to_cluster(cpu_dev->id);
+	char name[14] = "cpu-cluster.";
 	int ret;
 
 	if (freq_table[cluster])
 		return 0;
 
+	/* just do it when boot up and first core of each cluster come online */
+#ifdef CONFIG_HISI_CPUFREQ
+	if (!per_cpu(opp_initialized, cpu_dev->id)) {
+		ret = arm_bL_ops->init_opp_table(cpu_dev);
+		if (ret) {
+			dev_err(cpu_dev, "%s: init_opp_table failed, cpu: %d, err: %d\n",
+				__func__, cpu_dev->id, ret);
+			goto out;
+		}
+		per_cpu(opp_initialized, cpu_dev->id) = true;
+	}
+#else
 	ret = arm_bL_ops->init_opp_table(cpu_dev);
 	if (ret) {
 		dev_err(cpu_dev, "%s: init_opp_table failed, cpu: %d, err: %d\n",
 				__func__, cpu_dev->id, ret);
 		goto out;
 	}
+#endif
+
+#ifdef CONFIG_ARCH_HISI_MAXFREQ
+	of_target_cpu(cluster, cpu_dev);
+#endif
 
 	ret = dev_pm_opp_init_cpufreq_table(cpu_dev, &freq_table[cluster]);
 	if (ret) {
@@ -357,7 +386,8 @@ static int _get_cluster_clk_and_freq_table(struct device *cpu_dev)
 		goto free_opp_table;
 	}
 
-	clk[cluster] = clk_get(cpu_dev, NULL);
+	name[12] = cluster + '0';
+	clk[cluster] = clk_get(cpu_dev, name);
 	if (!IS_ERR(clk[cluster])) {
 		dev_dbg(cpu_dev, "%s: clk: %p & freq table: %p, cluster: %d\n",
 				__func__, clk[cluster], freq_table[cluster],
@@ -588,6 +618,12 @@ int bL_cpufreq_register(struct cpufreq_arm_bL_ops *ops)
 
 	for (i = 0; i < MAX_CLUSTERS; i++)
 		mutex_init(&cluster_lock[i]);
+
+	/* Initialize before register driver */
+#ifdef CONFIG_HISI_CPUFREQ
+	for_each_possible_cpu(i)
+		per_cpu(opp_initialized, i) = false;
+#endif
 
 	ret = cpufreq_register_driver(&bL_cpufreq_driver);
 	if (ret) {

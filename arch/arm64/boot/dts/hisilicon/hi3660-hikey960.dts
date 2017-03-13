@@ -38,6 +38,152 @@
 		reg = <0x0 0x00400000 0x0 0xBFE00000>;
 	};
 
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		logo-buffer {
+			reg = <0x0 0xb000000 0x0 0x3000000>;
+			status = "disable";
+		};
+
+		fastboot_cma:   fastboot-cma-mem {
+			reg = <0x0 0x16c00000 0x0 0x4000000>;
+			compatible = "shared-dma-pool";
+			hisi,cma-sec;
+			reusable;
+		};
+
+
+		isp_cma:        isp-boot {
+			reg = <0x0 0x1AC00000 0x0 0x2400000>;
+			compatible = "shared-dma-pool";
+			reusable;
+		};
+
+		isp-boot-nocma {
+			reg = <0x0 0x1D000000 0x0 0x100000>;
+			no-map;
+		};
+
+		ivp {
+			reg = <0x0 0x1D100000 0x0 0x100000>;
+			no-map;
+		};
+
+
+		secos {
+			reg = <0x0 0x1d200000 0x0 0x3000000>;
+			no-map;
+		};
+
+		bl31 {
+			reg = <0x0 0x20200000 0x0 0x200000>;
+			no-map;
+		};
+
+		sensorhub-s {
+			reg = <0x0 0x20400000 0x0 0x600000>;
+			no-map;
+		};
+
+		ramoops_ram:pstore-mem{
+			reg = <0x0 0x20A00000 0x0 0x100000>;
+		};
+
+		/*fastboot kernel android reserve mem; non secure;no map*/
+		fka-mem{
+			reg = <0x0 0x20B00000 0x0 0x3F000>;
+			no-map;
+		};
+
+		/* At the end of fka-mem */
+		mntndump {
+			reg = <0x0 0x20B3F000 0x0 0x1000>;
+			no-map;
+		};
+
+		/* Temporary name  */
+		fka-mem_part2{
+			reg = <0x0 0x20B40000 0x0 0x40000>;
+			no-map;
+		};
+
+		sensorhub-share-mem {
+			reg = <0x0 0x20B80000 0x0 0x80000>;
+			no-map;
+		};
+
+
+		xmode-data{
+			reg = <0x0 0x20C00000 0x0 0x1F400000>;
+			no-map;
+			status = "disabled";
+		};
+
+		kerneldump {
+			reg = <0x0 0x40000000 0x0 0x20000000>;
+			status = "disable";
+		};
+
+		tui_cma:  tui-mem{
+			size  = <0x0 0x2000000>;
+			alignment = <0x0 0x2000000>;
+			alloc-ranges = <0x0 0x0 0x1 0x0>;
+			compatible = "shared-dma-pool";
+			reusable;
+			status = "disabled";
+		};
+
+		modem-s {
+			reg = <0x0 0x80000000 0x0 0x8900000>;
+			no-map;
+		};
+
+		hifi-base {
+			reg = <0x0 0x88900000 0x0 0x980000>;
+			no-map;
+		};
+
+		lpmx-core {
+			reg = <0x0 0x89280000 0x0 0x100000>;
+			no-map;
+		};
+
+		lpmcu {
+			reg = <0x0 0x89380000 0x0 0x40000>;
+			no-map;
+		};
+
+		align-reserved {
+			reg = <0x0 0x893C0000 0x0 0x40000>;
+			no-map;
+		};
+
+		modem-share-mem {
+			reg = <0x0 0x89400000 0x0 0x500000>;
+			no-map;
+		};
+
+		modem-socp {
+			reg = <0x0 0x89900000 0x0 0x1100000>;
+			no-map;
+		};
+
+
+		hifi-data {
+			reg = <0x0 0x8AA00000 0x0 0x380000>;
+			no-map;
+		};
+
+		mntn_mem:bbox-mem {
+			reg = <0x0 0x8AD80000 0x0 0x800000>;
+			hisi,cma-mem;
+		};
+	};
+
 	soc {
 		uart5: uart@fdf05000 {
 			status = "ok";
