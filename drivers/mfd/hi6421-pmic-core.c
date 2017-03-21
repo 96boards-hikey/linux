@@ -33,6 +33,7 @@
 
 static const struct mfd_cell hi6421_devs[] = {
 	{ .name = "hi6421-regulator", },
+	{ .name = "hi6421v530-regulator", },
 };
 
 static const struct regmap_config hi6421_regmap_config = {
@@ -66,6 +67,7 @@ static int hi6421_pmic_probe(struct platform_device *pdev)
 		return PTR_ERR(pmic->regmap);
 	}
 
+#ifdef CONFIG_REGULATOR_HI6421
 	/* set over-current protection debounce 8ms */
 	regmap_update_bits(pmic->regmap, HI6421_OCP_DEB_CTRL_REG,
 				(HI6421_OCP_DEB_SEL_MASK
@@ -73,6 +75,7 @@ static int hi6421_pmic_probe(struct platform_device *pdev)
 				 | HI6421_OCP_AUTO_STOP_MASK),
 				(HI6421_OCP_DEB_SEL_8MS
 				 | HI6421_OCP_EN_DEBOUNCE_ENABLE));
+#endif
 
 	platform_set_drvdata(pdev, pmic);
 
