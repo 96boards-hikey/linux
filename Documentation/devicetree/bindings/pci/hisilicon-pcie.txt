@@ -42,3 +42,54 @@ Hip05 Example (note that Hip06 is the same except compatible):
 				 0x0 0 0 4 &mbigen_pcie 4 13>;
 		status = "ok";
 	};
+
+
+HiSilicon Kirin SoC PCIe host DT description
+
+Kirin PCIe host controller is also based on Designware PCI core.
+It shares common functions with PCIe Designware core driver and inherits
+common properties defined in
+Documentation/devicetree/bindings/pci/designware-pci.txt.
+
+Additional properties are described here:
+
+Required properties
+- compatible: Should contain "hisilicon,kirin-pcie".
+- reg: Should contain rc_dbi, apb, phy, config registers location and length.
+- reg-names: Must include the following entries:
+  "dbi": controller configuration registers;
+  "apb": apb Ctrl register;
+  "phy": apb PHY register;
+  "config": PCIe configuration space registers.
+- reset-gpio: perst assert/deassert gpio
+
+Optional properties:
+- status: Either "ok" or "disabled".
+
+Kirin960 Example:
+        kirin_pcie_rc@f4000000 {
+                        compatible = "hisilicon,kirin-pcie";
+                        reg =  <0x0 0xf4000000 0x0 0x1000>, <0x0 0xff3fe000 0x0 0x1000>,
+                                 <0x0 0xf3f20000 0x0 0x40000>, <0x0 0xF5000000 0 0x2000>;
+                        reg-names = "dbi","apb","phy", "config";
+                        bus-range = <0x0  0x1>;
+                        #address-cells = <3>;
+                        #size-cells = <2>;
+                        device_type = "pci";
+                        ranges = <0x02000000 0x0 0x00000000 0x0 0xf6000000 0x0 0x2000000>;
+                        num-lanes = <1>;
+                        #interrupt-cells = <1>;
+                        interrupt-map-mask = <0xf800 0 0 7>;
+			interrupt-map = <0x0 0 0 2 &gic 0 0 0  283 4>,
+                                        <0x0 0 0 3 &gic 0 0 0  284 4>,
+                                        <0x0 0 0 4 &gic 0 0 0  285 4>;
+                        clocks = <&crg_ctrl HI3660_PCIEPHY_REF>,
+                                <&crg_ctrl HI3660_CLK_GATE_PCIEAUX>,
+                                <&crg_ctrl HI3660_PCLK_GATE_PCIE_PHY>,
+                                <&crg_ctrl HI3660_PCLK_GATE_PCIE_SYS>,
+                                <&crg_ctrl HI3660_ACLK_GATE_PCIE>;
+                        clock-names = "pcie_phy_ref", "pcie_aux",
+                                "pcie_apb_phy", "pcie_apb_sys", "pcie_aclk";
+                        reset-gpio = <&gpio11 1 0 >;
+                        status = "ok";
+        };
