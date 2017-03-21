@@ -301,4 +301,13 @@ config VMD
 	  To compile this driver as a module, choose M here: the
 	  module will be called vmd.
 
+config PCIE_KIRIN
+	depends on OF && ARM64
+	depends on ARCH_HISI
+	select PCIE_DW
+	bool "Hisilicon Kirin960 PCIe controller"
+	help
+	  Say Y here if you want PCIe controller support on Hisilicon
+	  Kirin960 SoC
+
 endmenu
