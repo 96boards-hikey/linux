@@ -249,18 +249,6 @@
 			opp-microvolt = <900000>;
 			clock-latency-ns = <300000>;
 		};
-
-		opp13 {
-			opp-hz = /bits/ 64 <2112000000>;
-			opp-microvolt = <1000000>;
-			clock-latency-ns = <300000>;
-		};
-
-		opp14 {
-			opp-hz = /bits/ 64 <2362000000>;
-			opp-microvolt = <1100000>;
-			clock-latency-ns = <300000>;
-		};
 	};
 
 	gic: interrupt-controller@e82b0000 {
