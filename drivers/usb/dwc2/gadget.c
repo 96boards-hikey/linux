@@ -2519,6 +2519,8 @@ void dwc2_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg,
 
 	/* Kill any ep0 requests as controller will be reinitialized */
 	kill_all_requests(hsotg, hsotg->eps_out[0], -ECONNRESET);
+	/* Make sure everything is disconnected */
+	dwc2_hsotg_disconnect(hsotg);
 
 	if (!is_usb_reset)
 		if (dwc2_core_reset(hsotg))
