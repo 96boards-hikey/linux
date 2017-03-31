@@ -371,6 +371,10 @@
 	hisi_ipc: ipc@e896b000 {
 		status = "ok";
 	};
+    hifidsp{
+        status = "ok";
+        compatible = "hisilicon,k3hifidsp";
+    };
 
     hisi_pctrl: pctrl@e8a09000 {
         compatible = "hisilicon,pctrl";
