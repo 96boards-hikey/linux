@@ -68,6 +68,7 @@ struct hi3660_stub_clk {
 	u32 table_len;
 
 	u32 rate;
+	unsigned int msg[8];
 
 	struct hi3660_stub_clk_chan *chan;
 };
@@ -166,15 +167,14 @@ static int hi3660_stub_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 {
 	struct hi3660_stub_clk *stub_clk =
 		container_of(hw, struct hi3660_stub_clk, hw);
-	unsigned int msg[8];
 
-	msg[0] = stub_clk->set_rate_cmd;
-	msg[1] = rate / 1000000;
+	stub_clk->msg[0] = stub_clk->set_rate_cmd;
+	stub_clk->msg[1] = rate / 1000000;
 
 	pr_debug("%s: set_rate_cmd[0] %x [1] %x\n", __func__,
-		msg[0], msg[1]);
+		stub_clk->msg[0], stub_clk->msg[1]);
 
-	mbox_send_message(stub_clk->chan->mbox, msg);
+	mbox_send_message(stub_clk->chan->mbox, stub_clk->msg);
 	stub_clk->rate = rate;
 	return 0;
 }
@@ -262,7 +262,7 @@ static int hi3660_stub_clk_probe(struct platform_device *pdev)
 	/* Use mailbox client with blocking mode */
 	chan->cl.dev = dev;
 	chan->cl.tx_done = NULL;
-	chan->cl.tx_block = true;
+	chan->cl.tx_block = false;
 	chan->cl.tx_tout = 500;
 	chan->cl.knows_txdone = false;
 
