@@ -16,6 +16,8 @@
  * published by the Free Software Foundation.
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/bcd.h>
 #include <linux/delay.h>
 #include <linux/io.h>
@@ -185,9 +187,9 @@ ds1685_rtc_end_data_access(struct ds1685_priv *rtc)
  * Only use this where you are certain another lock will not be held.
  */
 static inline void
-ds1685_rtc_begin_ctrl_access(struct ds1685_priv *rtc, unsigned long flags)
+ds1685_rtc_begin_ctrl_access(struct ds1685_priv *rtc, unsigned long *flags)
 {
-	spin_lock_irqsave(&rtc->lock, flags);
+	spin_lock_irqsave(&rtc->lock, *flags);
 	ds1685_rtc_switch_to_bank1(rtc);
 }
 
@@ -799,7 +801,7 @@ ds1685_rtc_proc(struct device *dev, struct seq_file *seq)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct ds1685_priv *rtc = platform_get_drvdata(pdev);
 	u8 ctrla, ctrlb, ctrlc, ctrld, ctrl4a, ctrl4b, ssn[8];
-	char *model = '\0';
+	char *model;
 #ifdef CONFIG_RTC_DS1685_PROC_REGS
 	char bits[NUM_REGS][(NUM_BITS * NUM_SPACES) + NUM_BITS + 1];
 #endif
@@ -1302,7 +1304,7 @@ ds1685_rtc_sysfs_ctrl_regs_store(struct device *dev,
 {
 	struct ds1685_priv *rtc = dev_get_drvdata(dev);
 	u8 reg = 0, bit = 0, tmp;
-	unsigned long flags = 0;
+	unsigned long flags;
 	long int val = 0;
 	const struct ds1685_rtc_ctrl_regs *reg_info =
 		ds1685_rtc_sysfs_ctrl_regs_lookup(attr->attr.name);
@@ -1323,7 +1325,7 @@ ds1685_rtc_sysfs_ctrl_regs_store(struct device *dev,
 	bit = reg_info->bit;
 
 	/* Safe to spinlock during a write. */
-	ds1685_rtc_begin_ctrl_access(rtc, flags);
+	ds1685_rtc_begin_ctrl_access(rtc, &flags);
 	tmp = rtc->read(rtc, reg);
 	rtc->write(rtc, reg, (val ? (tmp | bit) : (tmp & ~(bit))));
 	ds1685_rtc_end_ctrl_access(rtc, flags);
@@ -2139,32 +2141,11 @@ ds1685_rtc_remove(struct platform_device *pdev)
 static struct platform_driver ds1685_rtc_driver = {
 	.driver		= {
 		.name	= "rtc-ds1685",
-		.owner	= THIS_MODULE,
 	},
 	.probe		= ds1685_rtc_probe,
 	.remove		= ds1685_rtc_remove,
 };
-
-/**
- * ds1685_rtc_init - rtc module init.
- */
-static int __init
-ds1685_rtc_init(void)
-{
-	return platform_driver_register(&ds1685_rtc_driver);
-}
-
-/**
- * ds1685_rtc_exit - rtc module exit.
- */
-static void __exit
-ds1685_rtc_exit(void)
-{
-	platform_driver_unregister(&ds1685_rtc_driver);
-}
-
-module_init(ds1685_rtc_init);
-module_exit(ds1685_rtc_exit);
+module_platform_driver(ds1685_rtc_driver);
 /* ----------------------------------------------------------------------- */
 
 
@@ -2175,7 +2156,7 @@ module_exit(ds1685_rtc_exit);
  * ds1685_rtc_poweroff - uses the RTC chip to power the system off.
  * @pdev: pointer to platform_device structure.
  */
-extern void __noreturn
+void __noreturn
 ds1685_rtc_poweroff(struct platform_device *pdev)
 {
 	u8 ctrla, ctrl4a, ctrl4b;
@@ -2183,7 +2164,7 @@ ds1685_rtc_poweroff(struct platform_device *pdev)
 
 	/* Check for valid RTC data, else, spin forever. */
 	if (unlikely(!pdev)) {
-		pr_emerg("rtc-ds1685: platform device data not available, spinning forever ...\n");
+		pr_emerg("platform device data not available, spinning forever ...\n");
 		unreachable();
 	} else {
 		/* Get the rtc data. */

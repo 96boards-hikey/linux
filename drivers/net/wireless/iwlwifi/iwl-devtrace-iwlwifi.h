@@ -1,6 +1,7 @@
 /******************************************************************************
  *
  * Copyright(c) 2009 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2015 Intel Mobile Communications GmbH
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -35,7 +36,7 @@
 TRACE_EVENT(iwlwifi_dev_hcmd,
 	TP_PROTO(const struct device *dev,
 		 struct iwl_host_cmd *cmd, u16 total_size,
-		 struct iwl_cmd_header *hdr),
+		 struct iwl_cmd_header_wide *hdr),
 	TP_ARGS(dev, cmd, total_size, hdr),
 	TP_STRUCT__entry(
 		DEV_ENTRY
@@ -43,11 +44,14 @@ TRACE_EVENT(iwlwifi_dev_hcmd,
 		__field(u32, flags)
 	),
 	TP_fast_assign(
-		int i, offset = sizeof(*hdr);
+		int i, offset = sizeof(struct iwl_cmd_header);
+
+		if (hdr->group_id)
+			offset = sizeof(struct iwl_cmd_header_wide);
 
 		DEV_ASSIGN;
 		__entry->flags = cmd->flags;
-		memcpy(__get_dynamic_array(hcmd), hdr, sizeof(*hdr));
+		memcpy(__get_dynamic_array(hcmd), hdr, offset);
 
 		for (i = 0; i < IWL_MAX_CMD_TBS_PER_TFD; i++) {
 			if (!cmd->len[i])
@@ -57,26 +61,29 @@ TRACE_EVENT(iwlwifi_dev_hcmd,
 			offset += cmd->len[i];
 		}
 	),
-	TP_printk("[%s] hcmd %#.2x (%ssync)",
-		  __get_str(dev), ((u8 *)__get_dynamic_array(hcmd))[0],
+	TP_printk("[%s] hcmd %#.2x.%#.2x (%ssync)",
+		  __get_str(dev), ((u8 *)__get_dynamic_array(hcmd))[1],
+		  ((u8 *)__get_dynamic_array(hcmd))[0],
 		  __entry->flags & CMD_ASYNC ? "a" : "")
 );
 
 TRACE_EVENT(iwlwifi_dev_rx,
 	TP_PROTO(const struct device *dev, const struct iwl_trans *trans,
-		 void *rxbuf, size_t len),
-	TP_ARGS(dev, trans, rxbuf, len),
+		 struct iwl_rx_packet *pkt, size_t len),
+	TP_ARGS(dev, trans, pkt, len),
 	TP_STRUCT__entry(
 		DEV_ENTRY
-		__dynamic_array(u8, rxbuf, iwl_rx_trace_len(trans, rxbuf, len))
+		__field(u8, cmd)
+		__dynamic_array(u8, rxbuf, iwl_rx_trace_len(trans, pkt, len))
 	),
 	TP_fast_assign(
 		DEV_ASSIGN;
-		memcpy(__get_dynamic_array(rxbuf), rxbuf,
-		       iwl_rx_trace_len(trans, rxbuf, len));
+		__entry->cmd = pkt->hdr.cmd;
+		memcpy(__get_dynamic_array(rxbuf), pkt,
+		       iwl_rx_trace_len(trans, pkt, len));
 	),
 	TP_printk("[%s] RX cmd %#.2x",
-		  __get_str(dev), ((u8 *)__get_dynamic_array(rxbuf))[4])
+		  __get_str(dev), __entry->cmd)
 );
 
 TRACE_EVENT(iwlwifi_dev_tx,
@@ -116,11 +123,11 @@ TRACE_EVENT(iwlwifi_dev_ucode_error,
 	TP_PROTO(const struct device *dev, u32 desc, u32 tsf_low,
 		 u32 data1, u32 data2, u32 line, u32 blink1,
 		 u32 blink2, u32 ilink1, u32 ilink2, u32 bcon_time,
-		 u32 gp1, u32 gp2, u32 gp3, u32 ucode_ver, u32 hw_ver,
+		 u32 gp1, u32 gp2, u32 gp3, u32 major, u32 minor, u32 hw_ver,
 		 u32 brd_ver),
 	TP_ARGS(dev, desc, tsf_low, data1, data2, line,
 		blink1, blink2, ilink1, ilink2, bcon_time, gp1, gp2,
-		gp3, ucode_ver, hw_ver, brd_ver),
+		gp3, major, minor, hw_ver, brd_ver),
 	TP_STRUCT__entry(
 		DEV_ENTRY
 		__field(u32, desc)
@@ -136,7 +143,8 @@ TRACE_EVENT(iwlwifi_dev_ucode_error,
 		__field(u32, gp1)
 		__field(u32, gp2)
 		__field(u32, gp3)
-		__field(u32, ucode_ver)
+		__field(u32, major)
+		__field(u32, minor)
 		__field(u32, hw_ver)
 		__field(u32, brd_ver)
 	),
@@ -155,21 +163,22 @@ TRACE_EVENT(iwlwifi_dev_ucode_error,
 		__entry->gp1 = gp1;
 		__entry->gp2 = gp2;
 		__entry->gp3 = gp3;
-		__entry->ucode_ver = ucode_ver;
+		__entry->major = major;
+		__entry->minor = minor;
 		__entry->hw_ver = hw_ver;
 		__entry->brd_ver = brd_ver;
 	),
 	TP_printk("[%s] #%02d %010u data 0x%08X 0x%08X line %u, "
 		  "blink 0x%05X 0x%05X ilink 0x%05X 0x%05X "
-		  "bcon_tm %010u gp 0x%08X 0x%08X 0x%08X uCode 0x%08X "
-		  "hw 0x%08X brd 0x%08X",
+		  "bcon_tm %010u gp 0x%08X 0x%08X 0x%08X major 0x%08X "
+		  "minor 0x%08X hw 0x%08X brd 0x%08X",
 		  __get_str(dev), __entry->desc, __entry->tsf_low,
 		  __entry->data1,
 		  __entry->data2, __entry->line, __entry->blink1,
 		  __entry->blink2, __entry->ilink1, __entry->ilink2,
 		  __entry->bcon_time, __entry->gp1, __entry->gp2,
-		  __entry->gp3, __entry->ucode_ver, __entry->hw_ver,
-		  __entry->brd_ver)
+		  __entry->gp3, __entry->major, __entry->minor,
+		  __entry->hw_ver, __entry->brd_ver)
 );
 
 TRACE_EVENT(iwlwifi_dev_ucode_event,

@@ -347,9 +347,7 @@ int apparmor_bprm_set_creds(struct linux_binprm *bprm)
 		file_inode(bprm->file)->i_mode
 	};
 	const char *name = NULL, *target = NULL, *info = NULL;
-	int error = cap_bprm_set_creds(bprm);
-	if (error)
-		return error;
+	int error = 0;
 
 	if (bprm->cred_prepared)
 		return 0;
@@ -531,15 +529,13 @@ cleanup:
  */
 int apparmor_bprm_secureexec(struct linux_binprm *bprm)
 {
-	int ret = cap_bprm_secureexec(bprm);
-
 	/* the decision to use secure exec is computed in set_creds
 	 * and stored in bprm->unsafe.
 	 */
-	if (!ret && (bprm->unsafe & AA_SECURE_X_NEEDED))
-		ret = 1;
+	if (bprm->unsafe & AA_SECURE_X_NEEDED)
+		return 1;
 
-	return ret;
+	return 0;
 }
 
 /**
@@ -627,8 +623,8 @@ int aa_change_hat(const char *hats[], int count, u64 token, bool permtest)
 	/* released below */
 	cred = get_current_cred();
 	cxt = cred_cxt(cred);
-	profile = aa_cred_profile(cred);
-	previous_profile = cxt->previous;
+	profile = aa_get_newest_profile(aa_cred_profile(cred));
+	previous_profile = aa_get_newest_profile(cxt->previous);
 
 	if (unconfined(profile)) {
 		info = "unconfined";
@@ -724,6 +720,8 @@ audit:
 out:
 	aa_put_profile(hat);
 	kfree(name);
+	aa_put_profile(profile);
+	aa_put_profile(previous_profile);
 	put_cred(cred);
 
 	return error;

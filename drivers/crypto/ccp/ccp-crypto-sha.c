@@ -23,7 +23,6 @@
 
 #include "ccp-crypto.h"
 
-
 static int ccp_sha_complete(struct crypto_async_request *async_req, int ret)
 {
 	struct ahash_request *req = ahash_request_cast(async_req);
@@ -37,11 +36,13 @@ static int ccp_sha_complete(struct crypto_async_request *async_req, int ret)
 	if (rctx->hash_rem) {
 		/* Save remaining data to buffer */
 		unsigned int offset = rctx->nbytes - rctx->hash_rem;
+
 		scatterwalk_map_and_copy(rctx->buf, rctx->src,
 					 offset, rctx->hash_rem, 0);
 		rctx->buf_count = rctx->hash_rem;
-	} else
+	} else {
 		rctx->buf_count = 0;
+	}
 
 	/* Update result area if supplied */
 	if (req->result)
@@ -106,7 +107,15 @@ static int ccp_do_sha_update(struct ahash_request *req, unsigned int nbytes,
 
 		sg_init_one(&rctx->buf_sg, rctx->buf, rctx->buf_count);
 		sg = ccp_crypto_sg_table_add(&rctx->data_sg, &rctx->buf_sg);
+		if (!sg) {
+			ret = -EINVAL;
+			goto e_free;
+		}
 		sg = ccp_crypto_sg_table_add(&rctx->data_sg, req->src);
+		if (!sg) {
+			ret = -EINVAL;
+			goto e_free;
+		}
 		sg_mark_end(sg);
 
 		sg = rctx->data_sg.sgl;
@@ -139,6 +148,11 @@ static int ccp_do_sha_update(struct ahash_request *req, unsigned int nbytes,
 	rctx->first = 0;
 
 	ret = ccp_crypto_enqueue_request(&req->base, &rctx->cmd);
+
+	return ret;
+
+e_free:
+	sg_free_table(&rctx->data_sg);
 
 	return ret;
 }
@@ -193,6 +207,46 @@ static int ccp_sha_digest(struct ahash_request *req)
 	return ccp_sha_finup(req);
 }
 
+static int ccp_sha_export(struct ahash_request *req, void *out)
+{
+	struct ccp_sha_req_ctx *rctx = ahash_request_ctx(req);
+	struct ccp_sha_exp_ctx state;
+
+	/* Don't let anything leak to 'out' */
+	memset(&state, 0, sizeof(state));
+
+	state.type = rctx->type;
+	state.msg_bits = rctx->msg_bits;
+	state.first = rctx->first;
+	memcpy(state.ctx, rctx->ctx, sizeof(state.ctx));
+	state.buf_count = rctx->buf_count;
+	memcpy(state.buf, rctx->buf, sizeof(state.buf));
+
+	/* 'out' may not be aligned so memcpy from local variable */
+	memcpy(out, &state, sizeof(state));
+
+	return 0;
+}
+
+static int ccp_sha_import(struct ahash_request *req, const void *in)
+{
+	struct ccp_sha_req_ctx *rctx = ahash_request_ctx(req);
+	struct ccp_sha_exp_ctx state;
+
+	/* 'in' may not be aligned so memcpy to local variable */
+	memcpy(&state, in, sizeof(state));
+
+	memset(rctx, 0, sizeof(*rctx));
+	rctx->type = state.type;
+	rctx->msg_bits = state.msg_bits;
+	rctx->first = state.first;
+	memcpy(rctx->ctx, state.ctx, sizeof(rctx->ctx));
+	rctx->buf_count = state.buf_count;
+	memcpy(rctx->buf, state.buf, sizeof(rctx->buf));
+
+	return 0;
+}
+
 static int ccp_sha_setkey(struct crypto_ahash *tfm, const u8 *key,
 			  unsigned int key_len)
 {
@@ -227,8 +281,9 @@ static int ccp_sha_setkey(struct crypto_ahash *tfm, const u8 *key,
 		}
 
 		key_len = digest_size;
-	} else
+	} else {
 		memcpy(ctx->u.sha.key, key, key_len);
+	}
 
 	for (i = 0; i < block_size; i++) {
 		ctx->u.sha.ipad[i] = ctx->u.sha.key[i] ^ 0x36;
@@ -355,7 +410,7 @@ static int ccp_register_hmac_alg(struct list_head *head,
 	ret = crypto_register_ahash(alg);
 	if (ret) {
 		pr_err("%s ahash algorithm registration error (%d)\n",
-			base->cra_name, ret);
+		       base->cra_name, ret);
 		kfree(ccp_alg);
 		return ret;
 	}
@@ -388,9 +443,12 @@ static int ccp_register_sha_alg(struct list_head *head,
 	alg->final = ccp_sha_final;
 	alg->finup = ccp_sha_finup;
 	alg->digest = ccp_sha_digest;
+	alg->export = ccp_sha_export;
+	alg->import = ccp_sha_import;
 
 	halg = &alg->halg;
 	halg->digestsize = def->digest_size;
+	halg->statesize = sizeof(struct ccp_sha_exp_ctx);
 
 	base = &halg->base;
 	snprintf(base->cra_name, CRYPTO_MAX_ALG_NAME, "%s", def->name);
@@ -410,7 +468,7 @@ static int ccp_register_sha_alg(struct list_head *head,
 	ret = crypto_register_ahash(alg);
 	if (ret) {
 		pr_err("%s ahash algorithm registration error (%d)\n",
-			base->cra_name, ret);
+		       base->cra_name, ret);
 		kfree(ccp_alg);
 		return ret;
 	}

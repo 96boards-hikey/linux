@@ -1,0 +1,394 @@
+/*
+ * dts file for Hisilicon HiKey960 Development Board
+ *
+ * Copyright (C) 2016, Hisilicon Ltd.
+ *
+ */
+
+/dts-v1/;
+
+#include "hi3660.dtsi"
+#include "hi3660-ion.dtsi"
+#include "hikey960-pinctrl.dtsi"
+#include "hi3660-gpu.dtsi"
+#include "hi3660-drm.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+	model = "HiKey960";
+	compatible = "hisilicon,hi3660-hikey960", "hisilicon,hi3660";
+	hisi,boardid = <5 3 0 0>;
+
+	aliases {
+		mshc1 = &dwmmc1;
+		mshc2 = &dwmmc2;
+		serial0 = &uart0;
+		serial1 = &uart1;
+		serial2 = &uart2;
+		serial3 = &uart3;
+		serial4 = &uart4;
+		serial5 = &uart5;	/* console UART */
+		serial6 = &uart6;
+	};
+
+	chosen {
+		stdout-path = "serial5:115200n8";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x00400000 0x0 0xBFE00000>;
+	};
+
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		fastboot_cma:   fastboot-cma-mem {
+			reg = <0x0 0x16c00000 0x0 0x4000000>;
+			compatible = "shared-dma-pool";
+			hisi,cma-sec;
+			reusable;
+		};
+
+		bl31 {
+			reg = <0x0 0x20200000 0x0 0x200000>;
+			no-map;
+		};
+
+		ramoops_ram:pstore-mem{
+			reg = <0x0 0x20A00000 0x0 0x100000>;
+		};
+
+		lpmx-core {
+			reg = <0x0 0x89280000 0x0 0x100000>;
+			no-map;
+		};
+
+		lpmcu {
+			reg = <0x0 0x89380000 0x0 0x40000>;
+			no-map;
+		};
+	};
+
+	soc {
+		uart5: uart@fdf05000 {
+			status = "ok";
+		};
+
+		uart6: uart@fff32000 {
+			status = "ok";
+		};
+
+		ufs: ufs@ff3b0000 {
+			reset-gpio = <&gpio18 1 0>;
+			//vcc-supply = <&ldo15>;
+		};
+	};
+
+	smmu {
+		compatible = "hisi,hisi-smmu";
+		phy_pgd_base = <0x0 0x34A78000>;
+	};
+
+	smmu_lpae{
+		compatible = "hisi,hisi-smmu-lpae";
+		status = "ok";
+	};
+
+	pmic: pmic@fff34000 {
+		compatible = "hisilicon,hi6421-pmic";
+		reg = <0x0 0xfff34000 0x0 0x1000>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		regulators {
+			ldo1: LDO1 {
+				regulator-compatible = "hi6421v530_ldo1";
+				regulator-name = "LDO1";
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <1500000>;
+				regulator-always-on;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo3: LDO3 {
+				regulator-compatible = "hi6421v530_ldo3";
+				regulator-name = "LDO3";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <2200000>;
+				regulator-always-on;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo4: LDO4 {
+				regulator-compatible = "hi6421v530_ldo4";
+				regulator-name = "LDO4";
+				regulator-min-microvolt = <1700000>;
+				regulator-max-microvolt = <1900000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo9: LDO9 {
+				regulator-compatible = "hi6421v530_ldo9";
+				regulator-name = "LDO9";
+				regulator-min-microvolt = <1750000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-enable-ramp-delay = <240>;
+			};
+
+			ldo10: LDO10 {
+				regulator-compatible = "hi6421v530_ldo10";
+				regulator-name = "LDO10";
+				regulator-min-microvolt = <3100000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo13: LDO13 {
+				regulator-compatible = "hi6421v530_ldo13";
+				regulator-name = "LDO13";
+				regulator-min-microvolt = <1750000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo15: LDO15 {
+				regulator-compatible = "hi6421v530_ldo15";
+				regulator-name = "LDO15";
+				regulator-min-microvolt = <1750000>;
+				regulator-max-microvolt = <3000000>;
+				regulator-always-on;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo16: LDO16 {
+				regulator-compatible = "hi6421v530_ldo16";
+				regulator-name = "LDO16";
+				regulator-min-microvolt = <1750000>;
+				regulator-max-microvolt = <3000000>;
+				regulator-enable-ramp-delay = <360>;
+			};
+
+			ldo17: LDO17 {
+				regulator-compatible = "hi6421v530_ldo17";
+				regulator-name = "LDO17";
+				regulator-min-microvolt = <2600000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo19: LDO19 {
+				regulator-compatible = "hi6421v530_ldo19";
+				regulator-name = "LDO19";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <3000000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo20: LDO20 {
+				regulator-compatible = "hi6421v530_ldo20";
+				regulator-name = "LDO20";
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <1320000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo24: LDO24 {
+				regulator-compatible = "hi6421v530_ldo24";
+				regulator-name = "LDO24";
+				regulator-min-microvolt = <2600000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo25: LDO25 {
+				regulator-compatible = "hi6421v530_ldo25";
+				regulator-name = "LDO25";
+				regulator-min-microvolt = <1500000>;
+				regulator-max-microvolt = <3000000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo31: LDO31 {
+				regulator-compatible = "hi6421v530_ldo31";
+				regulator-name = "LDO31";
+				regulator-min-microvolt = <2500000>;
+				regulator-max-microvolt = <3200000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+
+			ldo32: LDO32 {
+				regulator-compatible = "hi6421v530_ldo32";
+				regulator-name = "LDO32";
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <1320000>;
+				regulator-enable-ramp-delay = <120>;
+			};
+		};
+	};
+
+	/* bluetooth - TI WL1837 */
+	kim {
+		compatible = "kim";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uart4_pmx_func &i2s0_pmx_func &uart4_cfg_func &i2s0_cfg_func>;
+		/*
+		 * FIXME: The following is complete CRAP since
+		 * the vendor driver doesn't follow the gpio
+		 * binding. Passing in a magic Linux gpio number
+		 * here until we fix the vendor driver.
+		 */
+		/* BT_EN: GPIO_126_BT_EN */
+		nshutdown_gpio = <390>;
+		dev_name = "/dev/ttyAMA4";
+		flow_cntrl = <1>;
+		/* baud_rate = <3000000>; */
+		/* baud_rate = <230400>; ok */
+		baud_rate = <921600>;
+		/* baud_rate = <1500000>; nok */
+	};
+
+	btwilink {
+		compatible = "btwilink";
+	};
+
+	/* power control mechanism for WLAN_EN */
+	wlan_en_reg: fixedregulator@1 {
+		compatible = "regulator-fixed";
+		regulator-name = "wlan-en-regulator";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+
+		/* WLAN_EN GPIO for this board - GPIO_051_WIFI_EN */
+		gpio = <&gpio6 3 0>;
+
+		/* WLAN card specific delay */
+		startup-delay-us = <70000>;
+		enable-active-high;
+	};
+
+	keys: gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwr_key_pmx_func &pwr_key_cfg_func>;
+
+		power {
+			wakeup-source;
+			gpios = <&gpio4 2 GPIO_ACTIVE_LOW>;
+			label = "GPIO Power";
+			linux,code = <KEY_POWER>;
+		};
+	};
+
+	leds_v1 {
+		compatible = "gpio-leds_v1";
+		status = "disabled";
+		user_led1 {
+			label = "user_led1";
+			gpios = <&gpio18 6 0>; /* <&gpio_150_user_led1>; */
+			linux,default-trigger = "heartbeat";
+		};
+
+		user_led2 {
+			label = "user_led2";
+			gpios = <&gpio18 7 0>; /* <&gpio_151_user_led2>; */
+			linux,default-trigger = "mmc0"; /* microSD card */
+		};
+
+		user_led3 {
+			label = "user_led3";
+			gpios = <&gpio23 5 0>; /* <&gpio_189_user_led3>; */
+			default-state = "off";
+		};
+
+		user_led4 {
+			label = "user_led4";
+			gpios = <&gpio23 6 0>; /* <&gpio_190_user_led4>; */
+			linux,default-trigger = "cpu0";
+		};
+
+		wlan_active_led {
+			label = "wifi_active";
+			gpios = <&gpio25 5 0>; /* <&gpio_205_wifi_active>; */
+			linux,default-trigger = "phy0tx";
+			default-state = "off";
+		};
+
+		bt_active_led {
+			label = "bt_active";
+			gpios = <&gpio25 7 0>; /* <&gpio_207_user_led1>; */
+			linux,default-trigger = "hci0rx";
+			default-state = "off";
+		};
+	};
+
+	leds_v2 {
+		compatible = "gpio-leds_v2";
+		status = "disabled";
+		user_led1 {
+			label = "user_led1";
+			gpios = <&gpio18 6 0>; /* <&gpio_150_user_led1>; */
+			linux,default-trigger = "heartbeat";
+		};
+
+		user_led2 {
+			label = "user_led2";
+			gpios = <&gpio23 5 0>; /* <&gpio_189_user_led2>; */
+			linux,default-trigger = "mmc0"; /* microSD card */
+		};
+
+		user_led3 {
+			label = "user_led3";
+			gpios = <&gpio23 6 0>; /* <&gpio_190_user_led3>; */
+			default-state = "off";
+		};
+
+		user_led4 {
+			label = "user_led4";
+			gpios = <&gpio26 3 0>; /* <&gpio_211_user_led4>; */
+			linux,default-trigger = "cpu0";
+		};
+
+		wlan_active_led {
+			label = "wifi_active";
+			gpios = <&gpio25 5 0>; /* <&gpio_205_wifi_active>; */
+			linux,default-trigger = "phy0tx";
+			default-state = "off";
+		};
+
+		bt_active_led {
+			label = "bt_active";
+			gpios = <&gpio25 7 0>; /* <&gpio_207_user_led1>; */
+			linux,default-trigger = "hci0rx";
+			default-state = "off";
+		};
+	};
+};
+
+&uart4 {
+	status = "ok";
+};
+
+&dwmmc2 { /* WIFI */
+	broken-cd;
+	/* WL_EN */
+	vmmc-supply = <&wlan_en_reg>;
+	ti,non-removable;
+	non-removable;
+	#address-cells = <0x1>;
+	#size-cells = <0x0>;
+	status = "ok";
+
+	wlcore: wlcore@2 {
+		compatible = "ti,wl1837";
+		reg = <2>;      /* sdio func num */
+		/* WL_IRQ, GPIO_179_WL_WAKEUP_AP */
+		interrupt-parent = <&gpio22>;
+		interrupts = <3 1>; /* IRQ_TYPE_EDGE_RISING */
+	};
+};

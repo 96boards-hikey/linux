@@ -23,6 +23,8 @@
 #define PTR_SUB(x, y) (((char *) (x)) - ((unsigned long) (y)))
 #define PTR_DIFF(x, y) ((unsigned long)(((char *) (x)) - ((unsigned long) (y))))
 
+#define LINUX_NOTE_NAME "LINUX"
+
 static struct memblock_region oldmem_region;
 
 static struct memblock_type oldmem_type = {
@@ -32,41 +34,7 @@ static struct memblock_type oldmem_type = {
 	.regions = &oldmem_region,
 };
 
-#define for_each_dump_mem_range(i, nid, p_start, p_end, p_nid)		\
-	for (i = 0, __next_mem_range(&i, nid, &memblock.physmem,	\
-				     &oldmem_type, p_start,		\
-				     p_end, p_nid);			\
-	     i != (u64)ULLONG_MAX;					\
-	     __next_mem_range(&i, nid, &memblock.physmem,		\
-			      &oldmem_type,				\
-			      p_start, p_end, p_nid))
-
 struct dump_save_areas dump_save_areas;
-
-/*
- * Allocate and add a save area for a CPU
- */
-struct save_area_ext *dump_save_area_create(int cpu)
-{
-	struct save_area_ext **save_areas, *save_area;
-
-	save_area = kmalloc(sizeof(*save_area), GFP_KERNEL);
-	if (!save_area)
-		return NULL;
-	if (cpu + 1 > dump_save_areas.count) {
-		dump_save_areas.count = cpu + 1;
-		save_areas = krealloc(dump_save_areas.areas,
-				      dump_save_areas.count * sizeof(void *),
-				      GFP_KERNEL | __GFP_ZERO);
-		if (!save_areas) {
-			kfree(save_area);
-			return NULL;
-		}
-		dump_save_areas.areas = save_areas;
-	}
-	dump_save_areas.areas[cpu] = save_area;
-	return save_area;
-}
 
 /*
  * Return physical address for virtual address
@@ -122,7 +90,7 @@ static ssize_t copy_oldmem_page_zfcpdump(char *buf, size_t csize,
 {
 	int rc;
 
-	if (src < sclp_get_hsa_size()) {
+	if (src < sclp.hsa_size) {
 		rc = memcpy_hsa(buf, src, csize, userbuf);
 	} else {
 		if (userbuf)
@@ -215,7 +183,7 @@ static int remap_oldmem_pfn_range_zfcpdump(struct vm_area_struct *vma,
 					   unsigned long pfn,
 					   unsigned long size, pgprot_t prot)
 {
-	unsigned long hsa_end = sclp_get_hsa_size();
+	unsigned long hsa_end = sclp.hsa_size;
 	unsigned long size_hsa;
 
 	if (pfn < hsa_end >> PAGE_SHIFT) {
@@ -258,7 +226,7 @@ int copy_from_oldmem(void *dest, void *src, size_t count)
 				return rc;
 		}
 	} else {
-		unsigned long hsa_end = sclp_get_hsa_size();
+		unsigned long hsa_end = sclp.hsa_size;
 		if ((unsigned long) src < hsa_end) {
 			copied = min(count, hsa_end - (unsigned long) src);
 			rc = memcpy_hsa(dest, (unsigned long) src, copied, 0);
@@ -346,7 +314,7 @@ static void *nt_fpregset(void *ptr, struct save_area *sa)
 static void *nt_s390_timer(void *ptr, struct save_area *sa)
 {
 	return nt_init(ptr, NT_S390_TIMER, &sa->timer, sizeof(sa->timer),
-			 KEXEC_CORE_NOTE_NAME);
+			 LINUX_NOTE_NAME);
 }
 
 /*
@@ -355,7 +323,7 @@ static void *nt_s390_timer(void *ptr, struct save_area *sa)
 static void *nt_s390_tod_cmp(void *ptr, struct save_area *sa)
 {
 	return nt_init(ptr, NT_S390_TODCMP, &sa->clk_cmp,
-		       sizeof(sa->clk_cmp), KEXEC_CORE_NOTE_NAME);
+		       sizeof(sa->clk_cmp), LINUX_NOTE_NAME);
 }
 
 /*
@@ -364,7 +332,7 @@ static void *nt_s390_tod_cmp(void *ptr, struct save_area *sa)
 static void *nt_s390_tod_preg(void *ptr, struct save_area *sa)
 {
 	return nt_init(ptr, NT_S390_TODPREG, &sa->tod_reg,
-		       sizeof(sa->tod_reg), KEXEC_CORE_NOTE_NAME);
+		       sizeof(sa->tod_reg), LINUX_NOTE_NAME);
 }
 
 /*
@@ -373,7 +341,7 @@ static void *nt_s390_tod_preg(void *ptr, struct save_area *sa)
 static void *nt_s390_ctrs(void *ptr, struct save_area *sa)
 {
 	return nt_init(ptr, NT_S390_CTRS, &sa->ctrl_regs,
-		       sizeof(sa->ctrl_regs), KEXEC_CORE_NOTE_NAME);
+		       sizeof(sa->ctrl_regs), LINUX_NOTE_NAME);
 }
 
 /*
@@ -382,7 +350,7 @@ static void *nt_s390_ctrs(void *ptr, struct save_area *sa)
 static void *nt_s390_prefix(void *ptr, struct save_area *sa)
 {
 	return nt_init(ptr, NT_S390_PREFIX, &sa->pref_reg,
-			 sizeof(sa->pref_reg), KEXEC_CORE_NOTE_NAME);
+			 sizeof(sa->pref_reg), LINUX_NOTE_NAME);
 }
 
 /*
@@ -391,7 +359,7 @@ static void *nt_s390_prefix(void *ptr, struct save_area *sa)
 static void *nt_s390_vx_high(void *ptr, __vector128 *vx_regs)
 {
 	return nt_init(ptr, NT_S390_VXRS_HIGH, &vx_regs[16],
-		       16 * sizeof(__vector128), KEXEC_CORE_NOTE_NAME);
+		       16 * sizeof(__vector128), LINUX_NOTE_NAME);
 }
 
 /*
@@ -404,18 +372,18 @@ static void *nt_s390_vx_low(void *ptr, __vector128 *vx_regs)
 	int i;
 
 	note = (Elf64_Nhdr *)ptr;
-	note->n_namesz = strlen(KEXEC_CORE_NOTE_NAME) + 1;
+	note->n_namesz = strlen(LINUX_NOTE_NAME) + 1;
 	note->n_descsz = 16 * 8;
 	note->n_type = NT_S390_VXRS_LOW;
 	len = sizeof(Elf64_Nhdr);
 
-	memcpy(ptr + len, KEXEC_CORE_NOTE_NAME, note->n_namesz);
+	memcpy(ptr + len, LINUX_NOTE_NAME, note->n_namesz);
 	len = roundup(len + note->n_namesz, 4);
 
 	ptr += len;
 	/* Copy lower halves of SIMD registers 0-15 */
 	for (i = 0; i < 16; i++) {
-		memcpy(ptr, &vx_regs[i], 8);
+		memcpy(ptr, &vx_regs[i].u[2], 8);
 		ptr += 8;
 	}
 	return ptr;
@@ -539,7 +507,8 @@ static int get_mem_chunk_cnt(void)
 	int cnt = 0;
 	u64 idx;
 
-	for_each_dump_mem_range(idx, NUMA_NO_NODE, NULL, NULL, NULL)
+	for_each_mem_range(idx, &memblock.physmem, &oldmem_type, NUMA_NO_NODE,
+			   MEMBLOCK_NONE, NULL, NULL, NULL)
 		cnt++;
 	return cnt;
 }
@@ -552,7 +521,8 @@ static void loads_init(Elf64_Phdr *phdr, u64 loads_offset)
 	phys_addr_t start, end;
 	u64 idx;
 
-	for_each_dump_mem_range(idx, NUMA_NO_NODE, &start, &end, NULL) {
+	for_each_mem_range(idx, &memblock.physmem, &oldmem_type, NUMA_NO_NODE,
+			   MEMBLOCK_NONE, &start, &end, NULL) {
 		phdr->p_filesz = end - start;
 		phdr->p_type = PT_LOAD;
 		phdr->p_offset = start;
@@ -609,7 +579,7 @@ int elfcorehdr_alloc(unsigned long long *addr, unsigned long long *size)
 	if (elfcorehdr_addr != ELFCORE_ADDR_MAX)
 		return 0;
 	/* If we cannot get HSA size for zfcpdump return error */
-	if (ipl_info.type == IPL_TYPE_FCP_DUMP && !sclp_get_hsa_size())
+	if (ipl_info.type == IPL_TYPE_FCP_DUMP && !sclp.hsa_size)
 		return -ENODEV;
 
 	/* For kdump, exclude previous crashkernel memory */

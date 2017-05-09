@@ -1298,21 +1298,22 @@ static int table_load(struct dm_ioctl *param, size_t param_size)
 		goto err_unlock_md_type;
 	}
 
-	if (dm_get_md_type(md) == DM_TYPE_NONE)
+	if (dm_get_md_type(md) == DM_TYPE_NONE) {
 		/* Initial table load: acquire type of table. */
 		dm_set_md_type(md, dm_table_get_type(t));
-	else if (dm_get_md_type(md) != dm_table_get_type(t)) {
+
+		/* setup md->queue to reflect md's type (may block) */
+		r = dm_setup_md_queue(md);
+		if (r) {
+			DMWARN("unable to set up device queue for new table.");
+			goto err_unlock_md_type;
+		}
+	} else if (dm_get_md_type(md) != dm_table_get_type(t)) {
 		DMWARN("can't change device type after initial table load.");
 		r = -EINVAL;
 		goto err_unlock_md_type;
 	}
 
-	/* setup md->queue to reflect md's type (may block) */
-	r = dm_setup_md_queue(md);
-	if (r) {
-		DMWARN("unable to set up device queue for new table.");
-		goto err_unlock_md_type;
-	}
 	dm_unlock_md_type(md);
 
 	/* stage inactive table */
@@ -1918,12 +1919,49 @@ int __init dm_interface_init(void)
 
 void dm_interface_exit(void)
 {
-	if (misc_deregister(&_dm_misc) < 0)
-		DMERR("misc_deregister failed for control device");
-
+	misc_deregister(&_dm_misc);
 	dm_hash_exit();
 }
 
+
+/**
+ * dm_ioctl_export - Permanently export a mapped device via the ioctl interface
+ * @md: Pointer to mapped_device
+ * @name: Buffer (size DM_NAME_LEN) for name
+ * @uuid: Buffer (size DM_UUID_LEN) for uuid or NULL if not desired
+ */
+int dm_ioctl_export(struct mapped_device *md, const char *name,
+		    const char *uuid)
+{
+	int r = 0;
+	struct hash_cell *hc;
+
+	if (!md) {
+		r = -ENXIO;
+		goto out;
+	}
+
+	/* The name and uuid can only be set once. */
+	mutex_lock(&dm_hash_cells_mutex);
+	hc = dm_get_mdptr(md);
+	mutex_unlock(&dm_hash_cells_mutex);
+	if (hc) {
+		DMERR("%s: already exported", dm_device_name(md));
+		r = -ENXIO;
+		goto out;
+	}
+
+	r = dm_hash_insert(name, uuid, md);
+	if (r) {
+		DMERR("%s: could not bind to '%s'", dm_device_name(md), name);
+		goto out;
+	}
+
+	/* Let udev know we've changed. */
+	dm_kobject_uevent(md, KOBJ_CHANGE, dm_get_event_nr(md));
+out:
+	return r;
+}
 /**
  * dm_copy_name_and_uuid - Copy mapped device name & uuid into supplied buffers
  * @md: Pointer to mapped_device

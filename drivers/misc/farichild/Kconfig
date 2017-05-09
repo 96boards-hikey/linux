@@ -1,0 +1,7 @@
+#
+# farichild devices
+#
+
+menu "farichild devices"
+source "drivers/misc/farichild/switch/Kconfig"
+endmenu

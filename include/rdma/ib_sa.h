@@ -39,6 +39,7 @@
 #include <linux/compiler.h>
 
 #include <linux/atomic.h>
+#include <linux/netdevice.h>
 
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_mad.h>
@@ -137,12 +138,12 @@ struct ib_sa_path_rec {
 	union ib_gid sgid;
 	__be16       dlid;
 	__be16       slid;
-	int          raw_traffic;
+	u8           raw_traffic;
 	/* reserved */
 	__be32       flow_label;
 	u8           hop_limit;
 	u8           traffic_class;
-	int          reversible;
+	u8           reversible;
 	u8           numb_path;
 	__be16       pkey;
 	__be16       qos_class;
@@ -154,10 +155,17 @@ struct ib_sa_path_rec {
 	u8           packet_life_time_selector;
 	u8           packet_life_time;
 	u8           preference;
-	u8           smac[ETH_ALEN];
 	u8           dmac[ETH_ALEN];
-	u16	     vlan_id;
+	/* ignored in IB */
+	int	     ifindex;
+	/* ignored in IB */
+	struct net  *net;
 };
+
+static inline struct net_device *ib_get_ndev_from_path(struct ib_sa_path_rec *rec)
+{
+	return rec->net ? dev_get_by_index(rec->net, rec->ifindex) : NULL;
+}
 
 #define IB_SA_MCMEMBER_REC_MGID				IB_SA_COMP_MASK( 0)
 #define IB_SA_MCMEMBER_REC_PORT_GID			IB_SA_COMP_MASK( 1)
@@ -196,7 +204,7 @@ struct ib_sa_mcmember_rec {
 	u8           hop_limit;
 	u8           scope;
 	u8           join_state;
-	int          proxy_join;
+	u8           proxy_join;
 };
 
 /* Service Record Component Mask Sec 15.2.5.14 Ver 1.1	*/

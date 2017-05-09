@@ -71,8 +71,8 @@ int amd_cache_northbridges(void)
 	while ((misc = next_northbridge(misc, amd_nb_misc_ids)) != NULL)
 		i++;
 
-	if (i == 0)
-		return 0;
+	if (!i)
+		return -ENODEV;
 
 	nb = kzalloc(i * sizeof(struct amd_northbridge), GFP_KERNEL);
 	if (!nb)
@@ -89,9 +89,7 @@ int amd_cache_northbridges(void)
 			next_northbridge(link, amd_nb_link_ids);
 	}
 
-	/* GART present only on Fam15h upto model 0fh */
-	if (boot_cpu_data.x86 == 0xf || boot_cpu_data.x86 == 0x10 ||
-	    (boot_cpu_data.x86 == 0x15 && boot_cpu_data.x86_model < 0x10))
+	if (amd_gart_present())
 		amd_northbridges.flags |= AMD_NB_GART;
 
 	/*

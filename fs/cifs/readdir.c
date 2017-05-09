@@ -78,18 +78,20 @@ cifs_prime_dcache(struct dentry *parent, struct qstr *name,
 {
 	struct dentry *dentry, *alias;
 	struct inode *inode;
-	struct super_block *sb = parent->d_inode->i_sb;
+	struct super_block *sb = d_inode(parent)->i_sb;
 	struct cifs_sb_info *cifs_sb = CIFS_SB(sb);
 
 	cifs_dbg(FYI, "%s: for %s\n", __func__, name->name);
 
 	dentry = d_hash_and_lookup(parent, name);
-	if (unlikely(IS_ERR(dentry)))
+	if (IS_ERR(dentry))
 		return;
 
 	if (dentry) {
-		inode = dentry->d_inode;
+		inode = d_inode(dentry);
 		if (inode) {
+			if (d_mountpoint(dentry))
+				goto out;
 			/*
 			 * If we're generating inode numbers, then we don't
 			 * want to clobber the existing one with the one that
@@ -280,6 +282,7 @@ initiate_cifs_search(const unsigned int xid, struct file *file)
 			rc = -ENOMEM;
 			goto error_exit;
 		}
+		spin_lock_init(&cifsFile->file_info_lock);
 		file->private_data = cifsFile;
 		cifsFile->tlink = cifs_get_tlink(tlink);
 		tcon = tlink_tcon(tlink);
@@ -592,14 +595,14 @@ find_cifs_entry(const unsigned int xid, struct cifs_tcon *tcon, loff_t pos,
 	     is_dir_changed(file)) || (index_to_find < first_entry_in_buffer)) {
 		/* close and restart search */
 		cifs_dbg(FYI, "search backing up - close and restart search\n");
-		spin_lock(&cifs_file_list_lock);
+		spin_lock(&cfile->file_info_lock);
 		if (server->ops->dir_needs_close(cfile)) {
 			cfile->invalidHandle = true;
-			spin_unlock(&cifs_file_list_lock);
+			spin_unlock(&cfile->file_info_lock);
 			if (server->ops->close_dir)
 				server->ops->close_dir(xid, tcon, &cfile->fid);
 		} else
-			spin_unlock(&cifs_file_list_lock);
+			spin_unlock(&cfile->file_info_lock);
 		if (cfile->srch_inf.ntwrk_buf_start) {
 			cifs_dbg(FYI, "freeing SMB ff cache buf on search rewind\n");
 			if (cfile->srch_inf.smallBuf)
@@ -845,6 +848,7 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 		 * if buggy server returns . and .. late do we want to
 		 * check for that here?
 		 */
+		*tmp_buf = 0;
 		rc = cifs_filldir(current_entry, file, ctx,
 				  tmp_buf, max_len);
 		if (rc) {

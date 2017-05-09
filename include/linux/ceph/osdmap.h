@@ -49,7 +49,7 @@ static inline bool ceph_can_shift_osds(struct ceph_pg_pool_info *pool)
 	case CEPH_POOL_TYPE_EC:
 		return false;
 	default:
-		BUG_ON(1);
+		BUG();
 	}
 }
 
@@ -175,13 +175,12 @@ static inline int ceph_decode_pgid(void **p, void *end, struct ceph_pg *pgid)
 	__u8 version;
 
 	if (!ceph_has_room(p, end, 1 + 8 + 4 + 4)) {
-		pr_warning("incomplete pg encoding");
-
+		pr_warn("incomplete pg encoding\n");
 		return -EINVAL;
 	}
 	version = ceph_decode_8(p);
 	if (version > 1) {
-		pr_warning("do not understand pg encoding %d > 1",
+		pr_warn("do not understand pg encoding %d > 1\n",
 			(int)version);
 		return -EINVAL;
 	}

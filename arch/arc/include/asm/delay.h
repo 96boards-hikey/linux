@@ -22,11 +22,13 @@
 static inline void __delay(unsigned long loops)
 {
 	__asm__ __volatile__(
-	"1:	sub.f %0, %0, 1	\n"
-	"	jpnz 1b		\n"
-	: "+r"(loops)
+	"	mov lp_count, %0	\n"
+	"	lp  1f			\n"
+	"	nop			\n"
+	"1:				\n"
 	:
-	: "cc");
+        : "r"(loops)
+        : "lp_count");
 }
 
 extern void __bad_udelay(void);

@@ -59,14 +59,13 @@ END_FTR_SECTION_IFSET(CPU_FTR_REAL_LE)				\
 
 #if defined(CONFIG_RELOCATABLE)
 	/*
-	 * We can't branch directly; in the direct case we use LR
-	 * and system_call_entry restores LR.  (We thus need to move
-	 * LR to r10 in the RFID case too.)
+	 * We can't branch directly so we do it via the CTR which
+	 * is volatile across system calls.
 	 */
 #define SYSCALL_PSERIES_2_DIRECT				\
 	mflr	r10 ;						\
 	ld	r12,PACAKBASE(r13) ; 				\
-	LOAD_HANDLER(r12, system_call_entry_direct) ;		\
+	LOAD_HANDLER(r12, system_call_entry) ;			\
 	mtctr	r12 ;						\
 	mfspr	r12,SPRN_SRR1 ;					\
 	/* Re-use of r13... No spare regs to do this */	\
@@ -80,7 +79,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_REAL_LE)				\
 	mfspr	r12,SPRN_SRR1 ;					\
 	li	r10,MSR_RI ;					\
 	mtmsrd 	r10,1 ;			/* Set RI (EE=0) */	\
-	b	system_call_entry_direct ;
+	b	system_call_common ;
 #endif
 
 /*
@@ -963,19 +962,7 @@ hv_facility_unavailable_relon_trampoline:
 #endif
 	STD_RELON_EXCEPTION_PSERIES(0x5700, 0x1700, altivec_assist)
 
-	/* Other future vectors */
 	.align	7
-	.globl	__end_interrupts
-__end_interrupts:
-
-	.align	7
-system_call_entry_direct:
-#if defined(CONFIG_RELOCATABLE)
-	/* The first level prologue may have used LR to get here, saving
-	 * orig in r10.  To save hacking/ifdeffing common code, restore here.
-	 */
-	mtlr	r10
-#endif
 system_call_entry:
 	b	system_call_common
 
@@ -1260,6 +1247,17 @@ __end_handlers:
 	STD_RELON_EXCEPTION_PSERIES_OOL(0xf40, vsx_unavailable)
 	STD_RELON_EXCEPTION_PSERIES_OOL(0xf60, facility_unavailable)
 	STD_RELON_EXCEPTION_HV_OOL(0xf80, hv_facility_unavailable)
+
+	/*
+	 * The __end_interrupts marker must be past the out-of-line (OOL)
+	 * handlers, so that they are copied to real address 0x100 when running
+	 * a relocatable kernel. This ensures they can be reached from the short
+	 * trampoline handlers (like 0x4f00, 0x4f20, etc.) which branch
+	 * directly, without using LOAD_HANDLER().
+	 */
+	.align	7
+	.globl	__end_interrupts
+__end_interrupts:
 
 #if defined(CONFIG_PPC_PSERIES) || defined(CONFIG_PPC_POWERNV)
 /*

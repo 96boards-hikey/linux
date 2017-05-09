@@ -22,11 +22,13 @@
 #include <asm/asm.h>
 #include <asm/branch.h>
 #include <asm/break.h>
+#include <asm/debug.h>
 #include <asm/fpu.h>
 #include <asm/fpu_emulator.h>
 #include <asm/inst.h>
 #include <asm/mips-r2-to-r6-emul.h>
 #include <asm/local.h>
+#include <asm/mipsregs.h>
 #include <asm/ptrace.h>
 #include <asm/uaccess.h>
 
@@ -187,7 +189,7 @@ static inline int mipsr6_emul(struct pt_regs *regs, u32 ir)
 }
 
 /**
- * movt_func - Emulate a MOVT instruction
+ * movf_func - Emulate a MOVF instruction
  * @regs: Process register set
  * @ir: Instruction
  *
@@ -200,9 +202,12 @@ static int movf_func(struct pt_regs *regs, u32 ir)
 
 	csr = current->thread.fpu.fcr31;
 	cond = fpucondbit[MIPSInst_RT(ir) >> 2];
+
 	if (((csr & cond) == 0) && MIPSInst_RD(ir))
 		regs->regs[MIPSInst_RD(ir)] = regs->regs[MIPSInst_RS(ir)];
+
 	MIPS_R2_STATS(movs);
+
 	return 0;
 }
 
@@ -895,8 +900,9 @@ static inline int mipsr2_find_op_func(struct pt_regs *regs, u32 inst,
  * mipsr2_decoder: Decode and emulate a MIPS R2 instruction
  * @regs: Process register set
  * @inst: Instruction to decode and emulate
+ * @fcr31: Floating Point Control and Status Register returned
  */
-int mipsr2_decoder(struct pt_regs *regs, u32 inst)
+int mipsr2_decoder(struct pt_regs *regs, u32 inst, unsigned long *fcr31)
 {
 	int err = 0;
 	unsigned long vaddr;
@@ -1158,13 +1164,22 @@ fpu_emul:
 		regs->regs[31] = r31;
 		regs->cp0_epc = epc;
 		if (!used_math()) {     /* First time FPU user.  */
+			preempt_disable();
 			err = init_fpu();
+			preempt_enable();
 			set_used_math();
 		}
 		lose_fpu(1);    /* Save FPU state for the emulator. */
 
 		err = fpu_emulator_cop1Handler(regs, &current->thread.fpu, 0,
 					       &fault_addr);
+		*fcr31 = current->thread.fpu.fcr31;
+
+		/*
+		 * We can't allow the emulated instruction to leave any of
+		 * the cause bits set in $fcr31.
+		 */
+		current->thread.fpu.fcr31 &= ~FPU_CSR_ALL_X;
 
 		/*
 		 * this is a tricky issue - lose_fpu() uses LL/SC atomics
@@ -1239,10 +1254,10 @@ fpu_emul:
 			"	j	10b\n"
 			"	.previous\n"
 			"	.section	__ex_table,\"a\"\n"
-			"	.word	1b,8b\n"
-			"	.word	2b,8b\n"
-			"	.word	3b,8b\n"
-			"	.word	4b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
 			"	.previous\n"
 			"	.set	pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1314,10 +1329,10 @@ fpu_emul:
 			"	j	10b\n"
 			"       .previous\n"
 			"	.section	__ex_table,\"a\"\n"
-			"	.word	1b,8b\n"
-			"	.word	2b,8b\n"
-			"	.word	3b,8b\n"
-			"	.word	4b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
 			"	.previous\n"
 			"	.set	pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1385,10 +1400,10 @@ fpu_emul:
 			"	j	9b\n"
 			"	.previous\n"
 			"	.section        __ex_table,\"a\"\n"
-			"	.word	1b,8b\n"
-			"	.word	2b,8b\n"
-			"	.word	3b,8b\n"
-			"	.word	4b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
 			"	.previous\n"
 			"	.set	pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1455,10 +1470,10 @@ fpu_emul:
 			"	j	9b\n"
 			"	.previous\n"
 			"	.section        __ex_table,\"a\"\n"
-			"	.word	1b,8b\n"
-			"	.word	2b,8b\n"
-			"	.word	3b,8b\n"
-			"	.word	4b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
 			"	.previous\n"
 			"	.set	pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1570,14 +1585,14 @@ fpu_emul:
 			"	j	9b\n"
 			"	.previous\n"
 			"	.section        __ex_table,\"a\"\n"
-			"	.word	1b,8b\n"
-			"	.word	2b,8b\n"
-			"	.word	3b,8b\n"
-			"	.word	4b,8b\n"
-			"	.word	5b,8b\n"
-			"	.word	6b,8b\n"
-			"	.word	7b,8b\n"
-			"	.word	0b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
+			STR(PTR) " 5b,8b\n"
+			STR(PTR) " 6b,8b\n"
+			STR(PTR) " 7b,8b\n"
+			STR(PTR) " 0b,8b\n"
 			"	.previous\n"
 			"	.set	pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1689,14 +1704,14 @@ fpu_emul:
 			"	j      9b\n"
 			"	.previous\n"
 			"	.section        __ex_table,\"a\"\n"
-			"	.word  1b,8b\n"
-			"	.word  2b,8b\n"
-			"	.word  3b,8b\n"
-			"	.word  4b,8b\n"
-			"	.word  5b,8b\n"
-			"	.word  6b,8b\n"
-			"	.word  7b,8b\n"
-			"	.word  0b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
+			STR(PTR) " 5b,8b\n"
+			STR(PTR) " 6b,8b\n"
+			STR(PTR) " 7b,8b\n"
+			STR(PTR) " 0b,8b\n"
 			"	.previous\n"
 			"	.set    pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1808,14 +1823,14 @@ fpu_emul:
 			"	j	9b\n"
 			"	.previous\n"
 			"	.section        __ex_table,\"a\"\n"
-			"	.word	1b,8b\n"
-			"	.word	2b,8b\n"
-			"	.word	3b,8b\n"
-			"	.word	4b,8b\n"
-			"	.word	5b,8b\n"
-			"	.word	6b,8b\n"
-			"	.word	7b,8b\n"
-			"	.word	0b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
+			STR(PTR) " 5b,8b\n"
+			STR(PTR) " 6b,8b\n"
+			STR(PTR) " 7b,8b\n"
+			STR(PTR) " 0b,8b\n"
 			"	.previous\n"
 			"	.set	pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1926,14 +1941,14 @@ fpu_emul:
 			"       j	9b\n"
 			"       .previous\n"
 			"       .section        __ex_table,\"a\"\n"
-			"       .word	1b,8b\n"
-			"       .word	2b,8b\n"
-			"       .word	3b,8b\n"
-			"       .word	4b,8b\n"
-			"       .word	5b,8b\n"
-			"       .word	6b,8b\n"
-			"       .word	7b,8b\n"
-			"       .word	0b,8b\n"
+			STR(PTR) " 1b,8b\n"
+			STR(PTR) " 2b,8b\n"
+			STR(PTR) " 3b,8b\n"
+			STR(PTR) " 4b,8b\n"
+			STR(PTR) " 5b,8b\n"
+			STR(PTR) " 6b,8b\n"
+			STR(PTR) " 7b,8b\n"
+			STR(PTR) " 0b,8b\n"
 			"       .previous\n"
 			"       .set	pop\n"
 			: "+&r"(rt), "=&r"(rs),
@@ -1988,7 +2003,7 @@ fpu_emul:
 			"j	2b\n"
 			".previous\n"
 			".section        __ex_table,\"a\"\n"
-			".word  1b, 3b\n"
+			STR(PTR) " 1b,3b\n"
 			".previous\n"
 			: "=&r"(res), "+&r"(err)
 			: "r"(vaddr), "i"(SIGSEGV)
@@ -2046,7 +2061,7 @@ fpu_emul:
 			"j	2b\n"
 			".previous\n"
 			".section        __ex_table,\"a\"\n"
-			".word	1b, 3b\n"
+			STR(PTR) " 1b,3b\n"
 			".previous\n"
 			: "+&r"(res), "+&r"(err)
 			: "r"(vaddr), "i"(SIGSEGV));
@@ -2107,7 +2122,7 @@ fpu_emul:
 			"j	2b\n"
 			".previous\n"
 			".section        __ex_table,\"a\"\n"
-			".word  1b, 3b\n"
+			STR(PTR) " 1b,3b\n"
 			".previous\n"
 			: "=&r"(res), "+&r"(err)
 			: "r"(vaddr), "i"(SIGSEGV)
@@ -2170,7 +2185,7 @@ fpu_emul:
 			"j	2b\n"
 			".previous\n"
 			".section        __ex_table,\"a\"\n"
-			".word	1b, 3b\n"
+			STR(PTR) " 1b,3b\n"
 			".previous\n"
 			: "+&r"(res), "+&r"(err)
 			: "r"(vaddr), "i"(SIGSEGV));
@@ -2352,7 +2367,6 @@ static const struct file_operations mipsr2_clear_fops = {
 
 static int __init mipsr2_init_debugfs(void)
 {
-	extern struct dentry	*mips_debugfs_dir;
 	struct dentry		*mipsr2_emul;
 
 	if (!mips_debugfs_dir)

@@ -482,9 +482,9 @@ long st_kim_start(void *kim_data)
 			pdata->chip_enable(kim_gdata);
 
 		/* Configure BT nShutdown to HIGH state */
-		gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
+		gpio_set_value_cansleep(kim_gdata->nshutdown, GPIO_LOW);
 		mdelay(5);	/* FIXME: a proper toggle */
-		gpio_set_value(kim_gdata->nshutdown, GPIO_HIGH);
+		gpio_set_value_cansleep(kim_gdata->nshutdown, GPIO_HIGH);
 		mdelay(100);
 		/* re-initialize the completion */
 		reinit_completion(&kim_gdata->ldisc_installed);
@@ -566,11 +566,11 @@ long st_kim_stop(void *kim_data)
 	}
 
 	/* By default configure BT nShutdown to LOW state */
-	gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
+	gpio_set_value_cansleep(kim_gdata->nshutdown, GPIO_LOW);
 	mdelay(1);
-	gpio_set_value(kim_gdata->nshutdown, GPIO_HIGH);
+	gpio_set_value_cansleep(kim_gdata->nshutdown, GPIO_HIGH);
 	mdelay(1);
-	gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
+	gpio_set_value_cansleep(kim_gdata->nshutdown, GPIO_LOW);
 
 	/* platform specific disable */
 	if (pdata->chip_disable)
@@ -752,9 +752,8 @@ static struct ti_st_plat_data *get_platform_data(struct device *dev)
 	int len;
 
 	dt_pdata = kzalloc(sizeof(*dt_pdata), GFP_KERNEL);
-
 	if (!dt_pdata)
-		pr_err("Can't allocate device_tree platform data\n");
+		return NULL;
 
 	dt_property = of_get_property(np, "dev_name", &len);
 	if (dt_property)
@@ -940,7 +939,6 @@ static struct platform_driver kim_platform_driver = {
 	.resume = kim_resume,
 	.driver = {
 		.name = "kim",
-		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(kim_of_match),
 	},
 };

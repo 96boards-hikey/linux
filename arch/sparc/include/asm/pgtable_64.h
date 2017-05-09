@@ -308,12 +308,26 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t prot)
 	"	sllx		%1, 32, %1\n"
 	"	or		%0, %1, %0\n"
 	"	.previous\n"
+	"	.section	.sun_m7_2insn_patch, \"ax\"\n"
+	"	.word		661b\n"
+	"	sethi		%%uhi(%4), %1\n"
+	"	sethi		%%hi(%4), %0\n"
+	"	.word		662b\n"
+	"	or		%1, %%ulo(%4), %1\n"
+	"	or		%0, %%lo(%4), %0\n"
+	"	.word		663b\n"
+	"	sllx		%1, 32, %1\n"
+	"	or		%0, %1, %0\n"
+	"	.previous\n"
 	: "=r" (mask), "=r" (tmp)
 	: "i" (_PAGE_PADDR_4U | _PAGE_MODIFIED_4U | _PAGE_ACCESSED_4U |
 	       _PAGE_CP_4U | _PAGE_CV_4U | _PAGE_E_4U |
 	       _PAGE_SPECIAL | _PAGE_PMD_HUGE | _PAGE_SZALL_4U),
 	  "i" (_PAGE_PADDR_4V | _PAGE_MODIFIED_4V | _PAGE_ACCESSED_4V |
 	       _PAGE_CP_4V | _PAGE_CV_4V | _PAGE_E_4V |
+	       _PAGE_SPECIAL | _PAGE_PMD_HUGE | _PAGE_SZALL_4V),
+	  "i" (_PAGE_PADDR_4V | _PAGE_MODIFIED_4V | _PAGE_ACCESSED_4V |
+	       _PAGE_CP_4V | _PAGE_E_4V |
 	       _PAGE_SPECIAL | _PAGE_PMD_HUGE | _PAGE_SZALL_4V));
 
 	return __pte((pte_val(pte) & mask) | (pgprot_val(prot) & ~mask));
@@ -342,9 +356,15 @@ static inline pgprot_t pgprot_noncached(pgprot_t prot)
 	"	andn		%0, %4, %0\n"
 	"	or		%0, %5, %0\n"
 	"	.previous\n"
+	"	.section	.sun_m7_2insn_patch, \"ax\"\n"
+	"	.word		661b\n"
+	"	andn		%0, %6, %0\n"
+	"	or		%0, %5, %0\n"
+	"	.previous\n"
 	: "=r" (val)
 	: "0" (val), "i" (_PAGE_CP_4U | _PAGE_CV_4U), "i" (_PAGE_E_4U),
-	             "i" (_PAGE_CP_4V | _PAGE_CV_4V), "i" (_PAGE_E_4V));
+	             "i" (_PAGE_CP_4V | _PAGE_CV_4V), "i" (_PAGE_E_4V),
+	             "i" (_PAGE_CP_4V));
 
 	return __pgprot(val);
 }
@@ -355,7 +375,7 @@ static inline pgprot_t pgprot_noncached(pgprot_t prot)
 #define pgprot_noncached pgprot_noncached
 
 #if defined(CONFIG_HUGETLB_PAGE) || defined(CONFIG_TRANSPARENT_HUGEPAGE)
-static inline pte_t pte_mkhuge(pte_t pte)
+static inline unsigned long __pte_huge_mask(void)
 {
 	unsigned long mask;
 
@@ -370,8 +390,19 @@ static inline pte_t pte_mkhuge(pte_t pte)
 	: "=r" (mask)
 	: "i" (_PAGE_SZHUGE_4U), "i" (_PAGE_SZHUGE_4V));
 
-	return __pte(pte_val(pte) | mask);
+	return mask;
 }
+
+static inline pte_t pte_mkhuge(pte_t pte)
+{
+	return __pte(pte_val(pte) | __pte_huge_mask());
+}
+
+static inline bool is_hugetlb_pte(pte_t pte)
+{
+	return !!(pte_val(pte) & __pte_huge_mask());
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 static inline pmd_t pmd_mkhuge(pmd_t pmd)
 {
@@ -383,6 +414,11 @@ static inline pmd_t pmd_mkhuge(pmd_t pmd)
 	return __pmd(pte_val(pte));
 }
 #endif
+#else
+static inline bool is_hugetlb_pte(pte_t pte)
+{
+	return false;
+}
 #endif
 
 static inline pte_t pte_mkdirty(pte_t pte)
@@ -845,10 +881,23 @@ static inline unsigned long pud_pfn(pud_t pud)
 void tlb_batch_add(struct mm_struct *mm, unsigned long vaddr,
 		   pte_t *ptep, pte_t orig, int fullmm);
 
-#define __HAVE_ARCH_PMDP_GET_AND_CLEAR
-static inline pmd_t pmdp_get_and_clear(struct mm_struct *mm,
-				       unsigned long addr,
-				       pmd_t *pmdp)
+static void maybe_tlb_batch_add(struct mm_struct *mm, unsigned long vaddr,
+				pte_t *ptep, pte_t orig, int fullmm)
+{
+	/* It is more efficient to let flush_tlb_kernel_range()
+	 * handle init_mm tlb flushes.
+	 *
+	 * SUN4V NOTE: _PAGE_VALID is the same value in both the SUN4U
+	 *             and SUN4V pte layout, so this inline test is fine.
+	 */
+	if (likely(mm != &init_mm) && pte_accessible(mm, orig))
+		tlb_batch_add(mm, vaddr, ptep, orig, fullmm);
+}
+
+#define __HAVE_ARCH_PMDP_HUGE_GET_AND_CLEAR
+static inline pmd_t pmdp_huge_get_and_clear(struct mm_struct *mm,
+					    unsigned long addr,
+					    pmd_t *pmdp)
 {
 	pmd_t pmd = *pmdp;
 	set_pmd_at(mm, addr, pmdp, __pmd(0UL));
@@ -861,15 +910,7 @@ static inline void __set_pte_at(struct mm_struct *mm, unsigned long addr,
 	pte_t orig = *ptep;
 
 	*ptep = pte;
-
-	/* It is more efficient to let flush_tlb_kernel_range()
-	 * handle init_mm tlb flushes.
-	 *
-	 * SUN4V NOTE: _PAGE_VALID is the same value in both the SUN4U
-	 *             and SUN4V pte layout, so this inline test is fine.
-	 */
-	if (likely(mm != &init_mm) && pte_accessible(mm, orig))
-		tlb_batch_add(mm, addr, ptep, orig, fullmm);
+	maybe_tlb_batch_add(mm, addr, ptep, orig, fullmm);
 }
 
 #define set_pte_at(mm,addr,ptep,pte)	\

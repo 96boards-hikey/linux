@@ -193,6 +193,7 @@ static int setup_ring(struct xenbus_device *dev, struct tpm_private *priv)
 	struct xenbus_transaction xbt;
 	const char *message = NULL;
 	int rv;
+	grant_ref_t gref;
 
 	priv->shr = (void *)__get_free_page(GFP_KERNEL|__GFP_ZERO);
 	if (!priv->shr) {
@@ -200,11 +201,11 @@ static int setup_ring(struct xenbus_device *dev, struct tpm_private *priv)
 		return -ENOMEM;
 	}
 
-	rv = xenbus_grant_ring(dev, virt_to_mfn(priv->shr));
+	rv = xenbus_grant_ring(dev, &priv->shr, 1, &gref);
 	if (rv < 0)
 		return rv;
 
-	priv->ring_ref = rv;
+	priv->ring_ref = gref;
 
 	rv = xenbus_alloc_evtchn(dev, &priv->evtchn);
 	if (rv)
@@ -304,7 +305,6 @@ static int tpmfront_probe(struct xenbus_device *dev,
 	rv = setup_ring(dev, priv);
 	if (rv) {
 		chip = dev_get_drvdata(&dev->dev);
-		tpm_chip_unregister(chip);
 		ring_free(priv);
 		return rv;
 	}

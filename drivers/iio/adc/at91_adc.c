@@ -182,7 +182,7 @@ struct at91_adc_caps {
 	u8	ts_pen_detect_sensitivity;
 
 	/* startup time calculate function */
-	u32 (*calc_startup_ticks)(u8 startup_time, u32 adc_clk_khz);
+	u32 (*calc_startup_ticks)(u32 startup_time, u32 adc_clk_khz);
 
 	u8	num_channels;
 	struct at91_adc_reg_desc registers;
@@ -201,7 +201,7 @@ struct at91_adc_state {
 	u8			num_channels;
 	void __iomem		*reg_base;
 	struct at91_adc_reg_desc *registers;
-	u8			startup_time;
+	u32			startup_time;
 	u8			sample_hold_time;
 	bool			sleep_mode;
 	struct iio_trigger	**trig;
@@ -381,8 +381,8 @@ static irqreturn_t at91_adc_rl_interrupt(int irq, void *private)
 		st->ts_bufferedmeasure = false;
 		input_report_key(st->ts_input, BTN_TOUCH, 0);
 		input_sync(st->ts_input);
-	} else if (status & AT91_ADC_EOC(3)) {
-		/* Conversion finished */
+	} else if (status & AT91_ADC_EOC(3) && st->ts_input) {
+		/* Conversion finished and we've a touchscreen */
 		if (st->ts_bufferedmeasure) {
 			/*
 			 * Last measurement is always discarded, since it can
@@ -779,7 +779,7 @@ ret:
 	return ret;
 }
 
-static u32 calc_startup_ticks_9260(u8 startup_time, u32 adc_clk_khz)
+static u32 calc_startup_ticks_9260(u32 startup_time, u32 adc_clk_khz)
 {
 	/*
 	 * Number of ticks needed to cover the startup time of the ADC
@@ -790,7 +790,7 @@ static u32 calc_startup_ticks_9260(u8 startup_time, u32 adc_clk_khz)
 	return round_up((startup_time * adc_clk_khz / 1000) - 1, 8) / 8;
 }
 
-static u32 calc_startup_ticks_9x5(u8 startup_time, u32 adc_clk_khz)
+static u32 calc_startup_ticks_9x5(u32 startup_time, u32 adc_clk_khz)
 {
 	/*
 	 * For sama5d3x and at91sam9x5, the formula changes to:

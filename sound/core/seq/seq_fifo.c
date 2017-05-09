@@ -33,10 +33,8 @@ struct snd_seq_fifo *snd_seq_fifo_new(int poolsize)
 	struct snd_seq_fifo *f;
 
 	f = kzalloc(sizeof(*f), GFP_KERNEL);
-	if (f == NULL) {
-		pr_debug("ALSA: seq: malloc failed for snd_seq_fifo_new() \n");
+	if (!f)
 		return NULL;
-	}
 
 	f->pool = snd_seq_pool_new(poolsize);
 	if (f->pool == NULL) {
@@ -71,6 +69,9 @@ void snd_seq_fifo_delete(struct snd_seq_fifo **fifo)
 	if (snd_BUG_ON(!f))
 		return;
 	*fifo = NULL;
+
+	if (f->pool)
+		snd_seq_pool_mark_closing(f->pool);
 
 	snd_seq_fifo_clear(f);
 
@@ -137,6 +138,7 @@ int snd_seq_fifo_event_in(struct snd_seq_fifo *f,
 	f->tail = cell;
 	if (f->head == NULL)
 		f->head = cell;
+	cell->next = NULL;
 	f->cells++;
 	spin_unlock_irqrestore(&f->lock, flags);
 
@@ -216,6 +218,8 @@ void snd_seq_fifo_cell_putback(struct snd_seq_fifo *f,
 		spin_lock_irqsave(&f->lock, flags);
 		cell->next = f->head;
 		f->head = cell;
+		if (!f->tail)
+			f->tail = cell;
 		f->cells++;
 		spin_unlock_irqrestore(&f->lock, flags);
 	}

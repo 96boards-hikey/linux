@@ -159,6 +159,7 @@ struct st_data_s {
 	unsigned long ll_state;
 	void *kim_data;
 	struct tty_struct *tty;
+	struct work_struct work_write_wakeup;
 };
 
 /*

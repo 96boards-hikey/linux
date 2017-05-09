@@ -152,7 +152,8 @@ static int rsvp_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		return -1;
 	nhptr = ip_hdr(skb);
 #endif
-
+	if (unlikely(!head))
+		return -1;
 restart:
 
 #if RSVP_DST_LEN == 4
@@ -283,21 +284,38 @@ static int rsvp_init(struct tcf_proto *tp)
 	return -ENOBUFS;
 }
 
-static void
-rsvp_delete_filter(struct tcf_proto *tp, struct rsvp_filter *f)
+static void rsvp_delete_filter_rcu(struct rcu_head *head)
 {
-	tcf_unbind_filter(tp, &f->res);
+	struct rsvp_filter *f = container_of(head, struct rsvp_filter, rcu);
+
 	tcf_exts_destroy(&f->exts);
-	kfree_rcu(f, rcu);
+	kfree(f);
 }
 
-static void rsvp_destroy(struct tcf_proto *tp)
+static void rsvp_delete_filter(struct tcf_proto *tp, struct rsvp_filter *f)
+{
+	tcf_unbind_filter(tp, &f->res);
+	/* all classifiers are required to call tcf_exts_destroy() after rcu
+	 * grace period, since converted-to-rcu actions are relying on that
+	 * in cleanup() callback
+	 */
+	call_rcu(&f->rcu, rsvp_delete_filter_rcu);
+}
+
+static bool rsvp_destroy(struct tcf_proto *tp, bool force)
 {
 	struct rsvp_head *data = rtnl_dereference(tp->root);
 	int h1, h2;
 
 	if (data == NULL)
-		return;
+		return true;
+
+	if (!force) {
+		for (h1 = 0; h1 < 256; h1++) {
+			if (rcu_access_pointer(data->ht[h1]))
+				return false;
+		}
+	}
 
 	RCU_INIT_POINTER(tp->root, NULL);
 
@@ -319,6 +337,7 @@ static void rsvp_destroy(struct tcf_proto *tp)
 		}
 	}
 	kfree_rcu(data, rcu);
+	return true;
 }
 
 static int rsvp_delete(struct tcf_proto *tp, unsigned long arg)

@@ -273,6 +273,7 @@ int l2tp_xmit_skb(struct l2tp_session *session, struct sk_buff *skb,
 int l2tp_nl_register_ops(enum l2tp_pwtype pw_type,
 			 const struct l2tp_nl_cmd_ops *ops);
 void l2tp_nl_unregister_ops(enum l2tp_pwtype pw_type);
+int l2tp_ioctl(struct sock *sk, int cmd, unsigned long arg);
 
 /* Session reference counts. Incremented when code obtains a reference
  * to a session.
@@ -320,5 +321,8 @@ do {									\
 	l2tp_printk(ptr, type, pr_info, fmt, ##__VA_ARGS__)
 #define l2tp_dbg(ptr, type, fmt, ...)					\
 	l2tp_printk(ptr, type, pr_debug, fmt, ##__VA_ARGS__)
+
+#define MODULE_ALIAS_L2TP_PWTYPE(type) \
+	MODULE_ALIAS("net-l2tp-type-" __stringify(type))
 
 #endif /* _L2TP_CORE_H_ */

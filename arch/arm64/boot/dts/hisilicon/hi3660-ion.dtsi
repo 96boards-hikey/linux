@@ -1,0 +1,141 @@
+/ {
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		graphic_heap: graphic {
+			size  = <0x0 0x1E00000>;
+			alignment = <0x0 0x100000>;
+			alloc-ranges = <0x0 0x0 0x1 0x0>;
+			compatible = "hisi_ion";
+			heap-name = "carveout_gralloc";
+		};
+
+		camera_heap: camera-mem {
+			size  = <0x0 0x28000000>;
+			alignment = <0x0 0x100000>;
+			alloc-ranges = <0x1 0x0 0x1 0x0>;
+			compatible = "shared-dma-pool";
+			reusable;
+			status = "disable";
+		};
+
+		drm_misc_heap: drm-misc-mem{
+			size = <0x0 0x2C00000>;
+			compatible = "hisi_ion";
+			alloc-ranges = <0x0 0x0 0x1 0x0>;
+			heap-name = "carveout_drm_misc";
+			status = "disable";
+		};
+		hisi_cma {
+			reg = <0x0 0x60000000 0x0 0x20000000>;
+			compatible = "hisi-cma-pool";
+			reusable;
+			status = "disable";
+		};
+	};
+
+	hisi,ion {
+		compatible = "hisilicon,hisi-ion";
+		memory-region = <&camera_heap>;
+
+		iommu_info {
+			start-addr = <0x40000>;
+			size = <0xbffc0000>;
+			iova-align = <0x0 0x8000>;
+		};
+
+		linear {
+			start-addr = <0x40000>;
+			size = <0xbffc0000>;
+			page-size = <0x1000>;
+			page-align = <0x40000>;
+		};
+
+		heap_sys_user@0 {
+			heap-name = "sys_heap";
+			heap-id   = <0x0>;
+			heap-base = <0x0>;
+			heap-size = <0x0>;
+			heap-type = "ion_system";
+		};
+		heap_sys_contig@1 {
+			heap-name = "sys_contig";
+			heap-id   = <0x1>;
+			heap-base = <0x0>;
+			heap-size = <0x0>;
+			heap-type = "ion_system_contig";
+		};
+		heap_carveout_gralloc@2 {
+			heap-name = <&graphic_heap>;
+			heap-id   = <0x2>;
+			heap-base = <0x0>;
+			heap-size = <0x0>;
+			heap-type = "ion_carveout";
+		};
+		heap_camera@6 {
+			heap-name = "camera_heap";
+			heap-id   = <0x6>;
+			heap-base = <0xffffffff>;
+			heap-size = <0xffffffff>;
+			heap-type = "ion_dma_pool";
+		};
+		heap_carveout_drm_misc@14 {
+			heap-name = <&drm_misc_heap>;
+			heap-id   = <0xe>;
+			heap-base = <0x0>;
+			heap-size = <0x0>;
+			heap-type = "ion_carveout";
+			status = "disable";
+		};
+		heap_sec_tui@17 {
+			heap-name = "heap_sec_tui";
+			heap-id   = <0x11>;
+			heap-base = <0x0>;
+			heap-size = <0x2000000>;
+			heap-type = "ion_sec";
+
+			region-nr = <0x0 0x3>;
+			protect-id = <0x0 0x1>;
+			access-attr = <0x0 0x6d8>;
+			water-mark = <0x0 0x2000000>;
+			per-alloc-size = <0x0 0x2000000>;
+			per-bit-size = <0x0 0x1000000>;
+			status = "disable";
+		};
+		heap_sec_iris@18 {
+			heap-name = "heap_sec_iris";
+			heap-id   = <0x12>;
+			heap-base = <0x0>;
+			heap-size = <0x3000000>;
+			heap-type = "ion_sec";
+
+			region-nr = <0x0 0x3>;
+			protect-id = <0x0 0x2>;
+			access-attr = <0x0 0x6d8>;
+			water-mark = <0x0 0x2000000>;
+			per-alloc-size = <0x0 0x2000000>;
+			per-bit-size = <0x0 0x1000000>;
+
+			status = "disable";
+		};
+
+		heap_sec_drm@20 {
+			heap-name = "heap_sec_drm";
+			heap-id   = <0x14>;
+			heap-base = <0x0>;
+			heap-size = <0x20000000>;
+			heap-type = "ion_sec";
+
+			region-nr = <0x0 0x3>;
+			protect-id = <0x0 0x0>;
+			access-attr = <0x0 0x7de>;
+			water-mark = <0x0 0x10000000>;
+			per-alloc-size = <0x0 0x4000000>;
+			per-bit-size = <0x0 0x1000000>;
+
+			status = "disable";
+		};
+	};
+};

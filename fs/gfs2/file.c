@@ -180,7 +180,7 @@ void gfs2_set_inode_flags(struct inode *inode)
 
 	flags &= ~(S_SYNC|S_APPEND|S_IMMUTABLE|S_NOATIME|S_DIRSYNC|S_NOSEC);
 	if ((ip->i_eattr == 0) && !is_sxid(inode->i_mode))
-		inode->i_flags |= S_NOSEC;
+		flags |= S_NOSEC;
 	if (ip->i_diskflags & GFS2_DIF_IMMUTABLE)
 		flags |= S_IMMUTABLE;
 	if (ip->i_diskflags & GFS2_DIF_APPENDONLY)
@@ -709,7 +709,7 @@ static ssize_t gfs2_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	gfs2_size_hint(file, iocb->ki_pos, iov_iter_count(from));
 
-	if (file->f_flags & O_APPEND) {
+	if (iocb->ki_flags & IOCB_APPEND) {
 		struct gfs2_holder gh;
 
 		ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, 0, &gh);
@@ -897,8 +897,8 @@ static long __gfs2_fallocate(struct file *file, int mode, loff_t offset, loff_t 
 
 	if (!(mode & FALLOC_FL_KEEP_SIZE) && (pos + count) > inode->i_size) {
 		i_size_write(inode, pos + count);
-		/* Marks the inode as dirty */
 		file_update_time(file);
+		mark_inode_dirty(inode);
 	}
 
 	return generic_write_sync(file, pos, count);
@@ -917,7 +917,7 @@ static long gfs2_fallocate(struct file *file, int mode, loff_t offset, loff_t le
 	struct gfs2_holder gh;
 	int ret;
 
-	if (mode & ~FALLOC_FL_KEEP_SIZE)
+	if ((mode & ~FALLOC_FL_KEEP_SIZE) || gfs2_is_jdata(ip))
 		return -EOPNOTSUPP;
 
 	mutex_lock(&inode->i_mutex);
@@ -1000,7 +1000,7 @@ static int gfs2_lock(struct file *file, int cmd, struct file_lock *fl)
 	}
 	if (unlikely(test_bit(SDF_SHUTDOWN, &sdp->sd_flags))) {
 		if (fl->fl_type == F_UNLCK)
-			posix_lock_file_wait(file, fl);
+			locks_lock_file_wait(file, fl);
 		return -EIO;
 	}
 	if (IS_GETLK(cmd))
@@ -1031,7 +1031,7 @@ static int do_flock(struct file *file, int cmd, struct file_lock *fl)
 	if (gl) {
 		if (fl_gh->gh_state == state)
 			goto out;
-		flock_lock_file_wait(file,
+		locks_lock_file_wait(file,
 				     &(struct file_lock){.fl_type = F_UNLCK});
 		gfs2_glock_dq(fl_gh);
 		gfs2_holder_reinit(state, flags, fl_gh);
@@ -1056,7 +1056,7 @@ static int do_flock(struct file *file, int cmd, struct file_lock *fl)
 		if (error == GLR_TRYFAILED)
 			error = -EAGAIN;
 	} else {
-		error = flock_lock_file_wait(file, fl);
+		error = locks_lock_file_wait(file, fl);
 		gfs2_assert_warn(GFS2_SB(&ip->i_inode), !error);
 	}
 
@@ -1071,7 +1071,7 @@ static void do_unflock(struct file *file, struct file_lock *fl)
 	struct gfs2_holder *fl_gh = &fp->f_fl_gh;
 
 	mutex_lock(&fp->f_fl_mutex);
-	flock_lock_file_wait(file, fl);
+	locks_lock_file_wait(file, fl);
 	if (fl_gh->gh_gl) {
 		gfs2_glock_dq(fl_gh);
 		gfs2_holder_uninit(fl_gh);
@@ -1105,9 +1105,7 @@ static int gfs2_flock(struct file *file, int cmd, struct file_lock *fl)
 
 const struct file_operations gfs2_file_fops = {
 	.llseek		= gfs2_llseek,
-	.read		= new_sync_read,
 	.read_iter	= generic_file_read_iter,
-	.write		= new_sync_write,
 	.write_iter	= gfs2_file_write_iter,
 	.unlocked_ioctl	= gfs2_ioctl,
 	.mmap		= gfs2_mmap,
@@ -1137,9 +1135,7 @@ const struct file_operations gfs2_dir_fops = {
 
 const struct file_operations gfs2_file_fops_nolock = {
 	.llseek		= gfs2_llseek,
-	.read		= new_sync_read,
 	.read_iter	= generic_file_read_iter,
-	.write		= new_sync_write,
 	.write_iter	= gfs2_file_write_iter,
 	.unlocked_ioctl	= gfs2_ioctl,
 	.mmap		= gfs2_mmap,

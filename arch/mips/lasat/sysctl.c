@@ -53,21 +53,6 @@ int proc_dolasatstring(struct ctl_table *table, int write,
 	return 0;
 }
 
-/* proc function to write EEPROM after changing int entry */
-int proc_dolasatint(struct ctl_table *table, int write,
-		       void *buffer, size_t *lenp, loff_t *ppos)
-{
-	int r;
-
-	r = proc_dointvec(table, write, buffer, lenp, ppos);
-	if ((!write) || r)
-		return r;
-
-	lasat_write_eeprom_info();
-
-	return 0;
-}
-
 #ifdef CONFIG_DS1603
 static int rtctmp;
 
@@ -285,4 +270,4 @@ static int __init lasat_register_sysctl(void)
 	return 0;
 }
 
-__initcall(lasat_register_sysctl);
+arch_initcall(lasat_register_sysctl);

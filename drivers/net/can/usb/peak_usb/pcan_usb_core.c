@@ -792,9 +792,9 @@ static int peak_usb_create_dev(const struct peak_usb_adapter *peak_usb_adapter,
 	dev->ep_msg_out = peak_usb_adapter->ep_msg_out[ctrl_idx];
 
 	dev->can.clock = peak_usb_adapter->clock;
-	dev->can.bittiming_const = &peak_usb_adapter->bittiming_const;
+	dev->can.bittiming_const = peak_usb_adapter->bittiming_const;
 	dev->can.do_set_bittiming = peak_usb_set_bittiming;
-	dev->can.data_bittiming_const = &peak_usb_adapter->data_bittiming_const;
+	dev->can.data_bittiming_const = peak_usb_adapter->data_bittiming_const;
 	dev->can.do_set_data_bittiming = peak_usb_set_data_bittiming;
 	dev->can.do_set_mode = peak_usb_set_mode;
 	dev->can.do_get_berr_counter = peak_usb_adapter->do_get_berr_counter;
@@ -872,23 +872,25 @@ lbl_free_candev:
 static void peak_usb_disconnect(struct usb_interface *intf)
 {
 	struct peak_usb_device *dev;
+	struct peak_usb_device *dev_prev_siblings;
 
 	/* unregister as many netdev devices as siblings */
-	for (dev = usb_get_intfdata(intf); dev; dev = dev->prev_siblings) {
+	for (dev = usb_get_intfdata(intf); dev; dev = dev_prev_siblings) {
 		struct net_device *netdev = dev->netdev;
 		char name[IFNAMSIZ];
 
+		dev_prev_siblings = dev->prev_siblings;
 		dev->state &= ~PCAN_USB_STATE_CONNECTED;
 		strncpy(name, netdev->name, IFNAMSIZ);
 
 		unregister_netdev(netdev);
-		free_candev(netdev);
 
 		kfree(dev->cmd_buf);
 		dev->next_siblings = NULL;
 		if (dev->adapter->dev_free)
 			dev->adapter->dev_free(dev);
 
+		free_candev(netdev);
 		dev_info(&intf->dev, "%s removed\n", name);
 	}
 

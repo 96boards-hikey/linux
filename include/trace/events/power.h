@@ -7,7 +7,7 @@
 #include <linux/ktime.h>
 #include <linux/pm_qos.h>
 #include <linux/tracepoint.h>
-#include <linux/ftrace_event.h>
+#include <linux/trace_events.h>
 
 #define TPS(x)  tracepoint_string(x)
 
@@ -42,45 +42,54 @@ TRACE_EVENT(pstate_sample,
 
 	TP_PROTO(u32 core_busy,
 		u32 scaled_busy,
-		u32 state,
+		u32 from,
+		u32 to,
 		u64 mperf,
 		u64 aperf,
+		u64 tsc,
 		u32 freq
 		),
 
 	TP_ARGS(core_busy,
 		scaled_busy,
-		state,
+		from,
+		to,
 		mperf,
 		aperf,
+		tsc,
 		freq
 		),
 
 	TP_STRUCT__entry(
 		__field(u32, core_busy)
 		__field(u32, scaled_busy)
-		__field(u32, state)
+		__field(u32, from)
+		__field(u32, to)
 		__field(u64, mperf)
 		__field(u64, aperf)
+		__field(u64, tsc)
 		__field(u32, freq)
-
-	),
+		),
 
 	TP_fast_assign(
 		__entry->core_busy = core_busy;
 		__entry->scaled_busy = scaled_busy;
-		__entry->state = state;
+		__entry->from = from;
+		__entry->to = to;
 		__entry->mperf = mperf;
 		__entry->aperf = aperf;
+		__entry->tsc = tsc;
 		__entry->freq = freq;
 		),
 
-	TP_printk("core_busy=%lu scaled=%lu state=%lu mperf=%llu aperf=%llu freq=%lu ",
+	TP_printk("core_busy=%lu scaled=%lu from=%lu to=%lu mperf=%llu aperf=%llu tsc=%llu freq=%lu ",
 		(unsigned long)__entry->core_busy,
 		(unsigned long)__entry->scaled_busy,
-		(unsigned long)__entry->state,
+		(unsigned long)__entry->from,
+		(unsigned long)__entry->to,
 		(unsigned long long)__entry->mperf,
 		(unsigned long long)__entry->aperf,
+		(unsigned long long)__entry->tsc,
 		(unsigned long)__entry->freq
 		)
 
@@ -109,6 +118,38 @@ DEFINE_EVENT(cpu, cpu_frequency,
 	TP_PROTO(unsigned int frequency, unsigned int cpu_id),
 
 	TP_ARGS(frequency, cpu_id)
+);
+
+TRACE_EVENT(cpu_frequency_limits,
+
+	TP_PROTO(unsigned int max_freq, unsigned int min_freq,
+		unsigned int cpu_id),
+
+	TP_ARGS(max_freq, min_freq, cpu_id),
+
+	TP_STRUCT__entry(
+		__field(	u32,		min_freq	)
+		__field(	u32,		max_freq	)
+		__field(	u32,		cpu_id		)
+	),
+
+	TP_fast_assign(
+		__entry->min_freq = min_freq;
+		__entry->max_freq = max_freq;
+		__entry->cpu_id = cpu_id;
+	),
+
+	TP_printk("min=%lu max=%lu cpu_id=%lu",
+		  (unsigned long)__entry->min_freq,
+		  (unsigned long)__entry->max_freq,
+		  (unsigned long)__entry->cpu_id)
+);
+
+DEFINE_EVENT(cpu, cpu_capacity,
+
+	TP_PROTO(unsigned int capacity, unsigned int cpu_id),
+
+	TP_ARGS(capacity, cpu_id)
 );
 
 TRACE_EVENT(device_pm_callback_start,
@@ -262,6 +303,25 @@ DEFINE_EVENT(clock, clock_set_rate,
 	TP_PROTO(const char *name, unsigned int state, unsigned int cpu_id),
 
 	TP_ARGS(name, state, cpu_id)
+);
+
+TRACE_EVENT(clock_set_parent,
+
+	TP_PROTO(const char *name, const char *parent_name),
+
+	TP_ARGS(name, parent_name),
+
+	TP_STRUCT__entry(
+		__string(       name,           name            )
+		__string(       parent_name,    parent_name     )
+	),
+
+	TP_fast_assign(
+		__assign_str(name, name);
+		__assign_str(parent_name, parent_name);
+	),
+
+	TP_printk("%s parent=%s", __get_str(name), __get_str(parent_name))
 );
 
 /*

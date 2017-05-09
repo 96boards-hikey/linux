@@ -67,11 +67,22 @@ static int __afu_open(struct inode *inode, struct file *file, bool master)
 		spin_unlock(&adapter->afu_list_lock);
 		goto err_put_adapter;
 	}
-	get_device(&afu->dev);
+
+	/*
+	 * taking a ref to the afu so that it doesn't go away
+	 * for rest of the function. This ref is released before
+	 * we return.
+	 */
+	cxl_afu_get(afu);
 	spin_unlock(&adapter->afu_list_lock);
 
 	if (!afu->current_mode)
 		goto err_put_afu;
+
+	if (!cxl_adapter_link_ok(adapter)) {
+		rc = -EIO;
+		goto err_put_afu;
+	}
 
 	if (!(ctx = cxl_context_alloc())) {
 		rc = -ENOMEM;
@@ -85,18 +96,18 @@ static int __afu_open(struct inode *inode, struct file *file, bool master)
 	file->private_data = ctx;
 	cxl_ctx_get();
 
-	/* Our ref on the AFU will now hold the adapter */
-	put_device(&adapter->dev);
-
-	return 0;
+	/* indicate success */
+	rc = 0;
 
 err_put_afu:
-	put_device(&afu->dev);
+	/* release the ref taken earlier */
+	cxl_afu_put(afu);
 err_put_adapter:
 	put_device(&adapter->dev);
 	return rc;
 }
-static int afu_open(struct inode *inode, struct file *file)
+
+int afu_open(struct inode *inode, struct file *file)
 {
 	return __afu_open(inode, file, false);
 }
@@ -106,7 +117,7 @@ static int afu_master_open(struct inode *inode, struct file *file)
 	return __afu_open(inode, file, true);
 }
 
-static int afu_release(struct inode *inode, struct file *file)
+int afu_release(struct inode *inode, struct file *file)
 {
 	struct cxl_context *ctx = file->private_data;
 
@@ -114,11 +125,16 @@ static int afu_release(struct inode *inode, struct file *file)
 		 __func__, ctx->pe);
 	cxl_context_detach(ctx);
 
-	mutex_lock(&ctx->mapping_lock);
-	ctx->mapping = NULL;
-	mutex_unlock(&ctx->mapping_lock);
 
-	put_device(&ctx->afu->dev);
+	/*
+	 * Delete the context's mapping pointer, unless it's created by the
+	 * kernel API, in which case leave it so it can be freed by reclaim_ctx()
+	 */
+	if (!ctx->kernelapi) {
+		mutex_lock(&ctx->mapping_lock);
+		ctx->mapping = NULL;
+		mutex_unlock(&ctx->mapping_lock);
+	}
 
 	/*
 	 * At this this point all bottom halfs have finished and we should be
@@ -128,7 +144,6 @@ static int afu_release(struct inode *inode, struct file *file)
 	 */
 	cxl_context_free(ctx);
 
-	cxl_ctx_put();
 	return 0;
 }
 
@@ -179,19 +194,25 @@ static long afu_ioctl_start_work(struct cxl_context *ctx,
 	if (work.flags & CXL_START_WORK_AMR)
 		amr = work.amr & mfspr(SPRN_UAMOR);
 
+	ctx->mmio_err_ff = !!(work.flags & CXL_START_WORK_ERR_FF);
+
 	/*
 	 * We grab the PID here and not in the file open to allow for the case
 	 * where a process (master, some daemon, etc) has opened the chardev on
 	 * behalf of another process, so the AFU's mm gets bound to the process
 	 * that performs this ioctl and not the process that opened the file.
+	 * Also we grab the PID of the group leader so that if the task that
+	 * has performed the attach operation exits the mm context of the
+	 * process is still accessible.
 	 */
-	ctx->pid = get_pid(get_task_pid(current, PIDTYPE_PID));
+	ctx->pid = get_task_pid(current, PIDTYPE_PID);
+	ctx->glpid = get_task_pid(current->group_leader, PIDTYPE_PID);
 
 	trace_cxl_attach(ctx, work.work_element_descriptor, work.num_interrupts, amr);
 
 	if ((rc = cxl_attach_process(ctx, false, work.work_element_descriptor,
 				     amr))) {
-		afu_release_irqs(ctx);
+		afu_release_irqs(ctx, ctx);
 		goto out;
 	}
 
@@ -212,11 +233,33 @@ static long afu_ioctl_process_element(struct cxl_context *ctx,
 	return 0;
 }
 
-static long afu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long afu_ioctl_get_afu_id(struct cxl_context *ctx,
+				 struct cxl_afu_id __user *upafuid)
+{
+	struct cxl_afu_id afuid = { 0 };
+
+	afuid.card_id = ctx->afu->adapter->adapter_num;
+	afuid.afu_offset = ctx->afu->slice;
+	afuid.afu_mode = ctx->afu->current_mode;
+
+	/* set the flag bit in case the afu is a slave */
+	if (ctx->afu->current_mode == CXL_MODE_DIRECTED && !ctx->master)
+		afuid.flags |= CXL_AFUID_FLAG_SLAVE;
+
+	if (copy_to_user(upafuid, &afuid, sizeof(afuid)))
+		return -EFAULT;
+
+	return 0;
+}
+
+long afu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct cxl_context *ctx = file->private_data;
 
 	if (ctx->status == CLOSED)
+		return -EIO;
+
+	if (!cxl_adapter_link_ok(ctx->afu->adapter))
 		return -EIO;
 
 	pr_devel("afu_ioctl\n");
@@ -225,6 +268,9 @@ static long afu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return afu_ioctl_start_work(ctx, (struct cxl_ioctl_start_work __user *)arg);
 	case CXL_IOCTL_GET_PROCESS_ELEMENT:
 		return afu_ioctl_process_element(ctx, (__u32 __user *)arg);
+	case CXL_IOCTL_GET_AFU_ID:
+		return afu_ioctl_get_afu_id(ctx, (struct cxl_afu_id __user *)
+					    arg);
 	}
 	return -EINVAL;
 }
@@ -235,7 +281,7 @@ static long afu_compat_ioctl(struct file *file, unsigned int cmd,
 	return afu_ioctl(file, cmd, arg);
 }
 
-static int afu_mmap(struct file *file, struct vm_area_struct *vm)
+int afu_mmap(struct file *file, struct vm_area_struct *vm)
 {
 	struct cxl_context *ctx = file->private_data;
 
@@ -243,10 +289,13 @@ static int afu_mmap(struct file *file, struct vm_area_struct *vm)
 	if (ctx->status != STARTED)
 		return -EIO;
 
+	if (!cxl_adapter_link_ok(ctx->afu->adapter))
+		return -EIO;
+
 	return cxl_context_iomap(ctx, vm);
 }
 
-static unsigned int afu_poll(struct file *file, struct poll_table_struct *poll)
+unsigned int afu_poll(struct file *file, struct poll_table_struct *poll)
 {
 	struct cxl_context *ctx = file->private_data;
 	int mask = 0;
@@ -278,7 +327,7 @@ static inline int ctx_event_pending(struct cxl_context *ctx)
 	    ctx->pending_afu_err || (ctx->status == CLOSED));
 }
 
-static ssize_t afu_read(struct file *file, char __user *buf, size_t count,
+ssize_t afu_read(struct file *file, char __user *buf, size_t count,
 			loff_t *off)
 {
 	struct cxl_context *ctx = file->private_data;
@@ -286,6 +335,9 @@ static ssize_t afu_read(struct file *file, char __user *buf, size_t count,
 	unsigned long flags;
 	int rc;
 	DEFINE_WAIT(wait);
+
+	if (!cxl_adapter_link_ok(ctx->afu->adapter))
+		return -EIO;
 
 	if (count < CXL_READ_MIN_SIZE)
 		return -EINVAL;
@@ -296,6 +348,11 @@ static ssize_t afu_read(struct file *file, char __user *buf, size_t count,
 		prepare_to_wait(&ctx->wq, &wait, TASK_INTERRUPTIBLE);
 		if (ctx_event_pending(ctx))
 			break;
+
+		if (!cxl_adapter_link_ok(ctx->afu->adapter)) {
+			rc = -EIO;
+			goto out;
+		}
 
 		if (file->f_flags & O_NONBLOCK) {
 			rc = -EAGAIN;
@@ -359,7 +416,11 @@ out:
 	return rc;
 }
 
-static const struct file_operations afu_fops = {
+/* 
+ * Note: if this is updated, we need to update api.c to patch the new ones in
+ * too
+ */
+const struct file_operations afu_fops = {
 	.owner		= THIS_MODULE,
 	.open           = afu_open,
 	.poll		= afu_poll,
@@ -493,7 +554,7 @@ int __init cxl_file_init(void)
 	 * If these change we really need to update API.  Either change some
 	 * flags or update API version number CXL_API_VERSION.
 	 */
-	BUILD_BUG_ON(CXL_API_VERSION != 1);
+	BUILD_BUG_ON(CXL_API_VERSION != 2);
 	BUILD_BUG_ON(sizeof(struct cxl_ioctl_start_work) != 64);
 	BUILD_BUG_ON(sizeof(struct cxl_event_header) != 8);
 	BUILD_BUG_ON(sizeof(struct cxl_event_afu_interrupt) != 8);

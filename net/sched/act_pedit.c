@@ -57,7 +57,8 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 	if (!tcf_hash_check(parm->index, a, bind)) {
 		if (!parm->nkeys)
 			return -EINVAL;
-		ret = tcf_hash_create(parm->index, est, a, sizeof(*p), bind);
+		ret = tcf_hash_create(parm->index, est, a, sizeof(*p),
+				      bind, false);
 		if (ret)
 			return ret;
 		p = to_pedit(a);
@@ -68,13 +69,12 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 		}
 		ret = ACT_P_CREATED;
 	} else {
-		p = to_pedit(a);
-		tcf_hash_release(a, bind);
 		if (bind)
 			return 0;
+		tcf_hash_release(a, bind);
 		if (!ovr)
 			return -EEXIST;
-
+		p = to_pedit(a);
 		if (p->tcfp_nkeys && p->tcfp_nkeys != parm->nkeys) {
 			keys = kmalloc(ksize, GFP_KERNEL);
 			if (keys == NULL)
@@ -104,11 +104,22 @@ static void tcf_pedit_cleanup(struct tc_action *a, int bind)
 	kfree(keys);
 }
 
+static bool offset_valid(struct sk_buff *skb, int offset)
+{
+	if (offset > 0 && offset > skb->len)
+		return false;
+
+	if  (offset < 0 && -offset > skb_headroom(skb))
+		return false;
+
+	return true;
+}
+
 static int tcf_pedit(struct sk_buff *skb, const struct tc_action *a,
 		     struct tcf_result *res)
 {
 	struct tcf_pedit *p = a->priv;
-	int i, munged = 0;
+	int i;
 	unsigned int off;
 
 	if (skb_unclone(skb, GFP_ATOMIC))
@@ -130,6 +141,11 @@ static int tcf_pedit(struct sk_buff *skb, const struct tc_action *a,
 			if (tkey->offmask) {
 				char *d, _d;
 
+				if (!offset_valid(skb, off + tkey->at)) {
+					pr_info("tc filter pedit 'at' offset %d out of bounds\n",
+						off + tkey->at);
+					goto bad;
+				}
 				d = skb_header_pointer(skb, off + tkey->at, 1,
 						       &_d);
 				if (!d)
@@ -142,10 +158,10 @@ static int tcf_pedit(struct sk_buff *skb, const struct tc_action *a,
 					" offset must be on 32 bit boundaries\n");
 				goto bad;
 			}
-			if (offset > 0 && offset > skb->len) {
-				pr_info("tc filter pedit"
-					" offset %d can't exceed pkt length %d\n",
-				       offset, skb->len);
+
+			if (!offset_valid(skb, off + offset)) {
+				pr_info("tc filter pedit offset %d out of bounds\n",
+					offset);
 				goto bad;
 			}
 
@@ -156,11 +172,8 @@ static int tcf_pedit(struct sk_buff *skb, const struct tc_action *a,
 			*ptr = ((*ptr & tkey->mask) ^ tkey->val);
 			if (ptr == &_data)
 				skb_store_bits(skb, off + offset, ptr, 4);
-			munged++;
 		}
 
-		if (munged)
-			skb->tc_verd = SET_TC_MUNGED(skb->tc_verd);
 		goto done;
 	} else
 		WARN(1, "pedit BUG: index %d\n", p->tcf_index);

@@ -285,7 +285,7 @@ void udp_del_offload(struct udp_offload *uo)
 	pr_warn("udp_del_offload: didn't find offload for port %d\n", ntohs(uo->port));
 unlock:
 	spin_unlock(&udp_offload_lock);
-	if (uo_priv != NULL)
+	if (uo_priv)
 		call_rcu(&uo_priv->rcu, udp_offload_free_routine);
 }
 EXPORT_SYMBOL(udp_del_offload);
@@ -299,14 +299,14 @@ struct sk_buff **udp_gro_receive(struct sk_buff **head, struct sk_buff *skb,
 	unsigned int off = skb_gro_offset(skb);
 	int flush = 1;
 
-	if (NAPI_GRO_CB(skb)->udp_mark ||
+	if (NAPI_GRO_CB(skb)->encap_mark ||
 	    (skb->ip_summed != CHECKSUM_PARTIAL &&
 	     NAPI_GRO_CB(skb)->csum_cnt == 0 &&
 	     !NAPI_GRO_CB(skb)->csum_valid))
 		goto out;
 
-	/* mark that this skb passed once through the udp gro layer */
-	NAPI_GRO_CB(skb)->udp_mark = 1;
+	/* mark that this skb passed once through the tunnel gro layer */
+	NAPI_GRO_CB(skb)->encap_mark = 1;
 
 	rcu_read_lock();
 	uo_priv = rcu_dereference(udp_offload_base);
@@ -339,8 +339,8 @@ unflush:
 	skb_gro_pull(skb, sizeof(struct udphdr)); /* pull encapsulating udp header */
 	skb_gro_postpull_rcsum(skb, uh, sizeof(struct udphdr));
 	NAPI_GRO_CB(skb)->proto = uo_priv->offload->ipproto;
-	pp = uo_priv->offload->callbacks.gro_receive(head, skb,
-						     uo_priv->offload);
+	pp = call_gro_receive_udp(uo_priv->offload->callbacks.gro_receive,
+				  head, skb, uo_priv->offload);
 
 out_unlock:
 	rcu_read_unlock();
@@ -394,7 +394,7 @@ int udp_gro_complete(struct sk_buff *skb, int nhoff)
 			break;
 	}
 
-	if (uo_priv != NULL) {
+	if (uo_priv) {
 		NAPI_GRO_CB(skb)->proto = uo_priv->offload->ipproto;
 		err = uo_priv->offload->callbacks.gro_complete(skb,
 				nhoff + sizeof(struct udphdr),

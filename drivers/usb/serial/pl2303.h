@@ -27,6 +27,7 @@
 #define ATEN_VENDOR_ID		0x0557
 #define ATEN_VENDOR_ID2		0x0547
 #define ATEN_PRODUCT_ID		0x2008
+#define ATEN_PRODUCT_ID2	0x2118
 
 #define IODATA_VENDOR_ID	0x04bb
 #define IODATA_PRODUCT_ID	0x0a03
@@ -61,10 +62,6 @@
 /* Alcatel OT535/735 USB cable */
 #define ALCATEL_VENDOR_ID	0x11f7
 #define ALCATEL_PRODUCT_ID	0x02df
-
-/* Samsung I330 phone cradle */
-#define SAMSUNG_VENDOR_ID	0x04e8
-#define SAMSUNG_PRODUCT_ID	0x8001
 
 #define SIEMENS_VENDOR_ID	0x11f5
 #define SIEMENS_PRODUCT_ID_SX1	0x0001

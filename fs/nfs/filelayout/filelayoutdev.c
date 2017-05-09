@@ -55,7 +55,7 @@ nfs4_fl_free_deviceid(struct nfs4_file_layout_dsaddr *dsaddr)
 			nfs4_pnfs_ds_put(ds);
 	}
 	kfree(dsaddr->stripe_indices);
-	kfree(dsaddr);
+	kfree_rcu(dsaddr, id_node.rcu);
 }
 
 /* Decode opaque device data and return the result */
@@ -283,7 +283,8 @@ nfs4_fl_prepare_ds(struct pnfs_layout_segment *lseg, u32 ds_idx)
 			     s->nfs_client->cl_rpcclient->cl_auth->au_flavor);
 
 out_test_devid:
-	if (filelayout_test_devid_unavailable(devid))
+	if (ret->ds_clp == NULL ||
+	    filelayout_test_devid_unavailable(devid))
 		ret = NULL;
 out:
 	return ret;

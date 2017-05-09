@@ -5,6 +5,7 @@
 #include <linux/static_key.h>
 #include <linux/context_tracking.h>
 #include "sched.h"
+#include "walt.h"
 
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
@@ -49,6 +50,10 @@ void irqtime_account_irq(struct task_struct *curr)
 	unsigned long flags;
 	s64 delta;
 	int cpu;
+#ifdef CONFIG_SCHED_WALT
+	u64 wallclock;
+	bool account = true;
+#endif
 
 	if (!sched_clock_irqtime)
 		return;
@@ -56,6 +61,9 @@ void irqtime_account_irq(struct task_struct *curr)
 	local_irq_save(flags);
 
 	cpu = smp_processor_id();
+#ifdef CONFIG_SCHED_WALT
+	wallclock = sched_clock_cpu(cpu);
+#endif
 	delta = sched_clock_cpu(cpu) - __this_cpu_read(irq_start_time);
 	__this_cpu_add(irq_start_time, delta);
 
@@ -70,8 +78,16 @@ void irqtime_account_irq(struct task_struct *curr)
 		__this_cpu_add(cpu_hardirq_time, delta);
 	else if (in_serving_softirq() && curr != this_cpu_ksoftirqd())
 		__this_cpu_add(cpu_softirq_time, delta);
+#ifdef CONFIG_SCHED_WALT
+	else
+		account = false;
+#endif
 
 	irq_time_write_end();
+#ifdef CONFIG_SCHED_WALT
+	if (account)
+		walt_account_irqtime(cpu, curr, delta, wallclock);
+#endif
 	local_irq_restore(flags);
 }
 EXPORT_SYMBOL_GPL(irqtime_account_irq);
@@ -259,21 +275,21 @@ static __always_inline bool steal_account_process_tick(void)
 #ifdef CONFIG_PARAVIRT
 	if (static_key_false(&paravirt_steal_enabled)) {
 		u64 steal;
-		cputime_t steal_ct;
+		unsigned long steal_jiffies;
 
 		steal = paravirt_steal_clock(smp_processor_id());
 		steal -= this_rq()->prev_steal_time;
 
 		/*
-		 * cputime_t may be less precise than nsecs (eg: if it's
-		 * based on jiffies). Lets cast the result to cputime
+		 * steal is in nsecs but our caller is expecting steal
+		 * time in jiffies. Lets cast the result to jiffies
 		 * granularity and account the rest on the next rounds.
 		 */
-		steal_ct = nsecs_to_cputime(steal);
-		this_rq()->prev_steal_time += cputime_to_nsecs(steal_ct);
+		steal_jiffies = nsecs_to_jiffies(steal);
+		this_rq()->prev_steal_time += jiffies_to_nsecs(steal_jiffies);
 
-		account_steal_time(steal_ct);
-		return steal_ct;
+		account_steal_time(jiffies_to_cputime(steal_jiffies));
+		return steal_jiffies;
 	}
 #endif
 	return false;
@@ -444,6 +460,7 @@ void task_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st)
 	*ut = p->utime;
 	*st = p->stime;
 }
+EXPORT_SYMBOL_GPL(task_cputime_adjusted);
 
 void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st)
 {
@@ -555,48 +572,43 @@ drop_precision:
 }
 
 /*
- * Atomically advance counter to the new value. Interrupts, vcpu
- * scheduling, and scaling inaccuracies can cause cputime_advance
- * to be occasionally called with a new value smaller than counter.
- * Let's enforce atomicity.
+ * Adjust tick based cputime random precision against scheduler runtime
+ * accounting.
  *
- * Normally a caller will only go through this loop once, or not
- * at all in case a previous caller updated counter the same jiffy.
- */
-static void cputime_advance(cputime_t *counter, cputime_t new)
-{
-	cputime_t old;
-
-	while (new > (old = ACCESS_ONCE(*counter)))
-		cmpxchg_cputime(counter, old, new);
-}
-
-/*
- * Adjust tick based cputime random precision against scheduler
- * runtime accounting.
+ * Tick based cputime accounting depend on random scheduling timeslices of a
+ * task to be interrupted or not by the timer.  Depending on these
+ * circumstances, the number of these interrupts may be over or
+ * under-optimistic, matching the real user and system cputime with a variable
+ * precision.
+ *
+ * Fix this by scaling these tick based values against the total runtime
+ * accounted by the CFS scheduler.
+ *
+ * This code provides the following guarantees:
+ *
+ *   stime + utime == rtime
+ *   stime_i+1 >= stime_i, utime_i+1 >= utime_i
+ *
+ * Assuming that rtime_i+1 >= rtime_i.
  */
 static void cputime_adjust(struct task_cputime *curr,
-			   struct cputime *prev,
+			   struct prev_cputime *prev,
 			   cputime_t *ut, cputime_t *st)
 {
 	cputime_t rtime, stime, utime;
+	unsigned long flags;
 
-	/*
-	 * Tick based cputime accounting depend on random scheduling
-	 * timeslices of a task to be interrupted or not by the timer.
-	 * Depending on these circumstances, the number of these interrupts
-	 * may be over or under-optimistic, matching the real user and system
-	 * cputime with a variable precision.
-	 *
-	 * Fix this by scaling these tick based values against the total
-	 * runtime accounted by the CFS scheduler.
-	 */
+	/* Serialize concurrent callers such that we can honour our guarantees */
+	raw_spin_lock_irqsave(&prev->lock, flags);
 	rtime = nsecs_to_cputime(curr->sum_exec_runtime);
 
 	/*
-	 * Update userspace visible utime/stime values only if actual execution
-	 * time is bigger than already exported. Note that can happen, that we
-	 * provided bigger values due to scaling inaccuracy on big numbers.
+	 * This is possible under two circumstances:
+	 *  - rtime isn't monotonic after all (a bug);
+	 *  - we got reordered by the lock.
+	 *
+	 * In both cases this acts as a filter such that the rest of the code
+	 * can assume it is monotonic regardless of anything else.
 	 */
 	if (prev->stime + prev->utime >= rtime)
 		goto out;
@@ -604,24 +616,53 @@ static void cputime_adjust(struct task_cputime *curr,
 	stime = curr->stime;
 	utime = curr->utime;
 
-	if (utime == 0) {
-		stime = rtime;
-	} else if (stime == 0) {
+	/*
+	 * If either stime or both stime and utime are 0, assume all runtime is
+	 * userspace. Once a task gets some ticks, the monotonicy code at
+	 * 'update' will ensure things converge to the observed ratio.
+	 */
+	if (stime == 0) {
 		utime = rtime;
-	} else {
-		cputime_t total = stime + utime;
-
-		stime = scale_stime((__force u64)stime,
-				    (__force u64)rtime, (__force u64)total);
-		utime = rtime - stime;
+		goto update;
 	}
 
-	cputime_advance(&prev->stime, stime);
-	cputime_advance(&prev->utime, utime);
+	if (utime == 0) {
+		stime = rtime;
+		goto update;
+	}
 
+	stime = scale_stime((__force u64)stime, (__force u64)rtime,
+			    (__force u64)(stime + utime));
+
+update:
+	/*
+	 * Make sure stime doesn't go backwards; this preserves monotonicity
+	 * for utime because rtime is monotonic.
+	 *
+	 *  utime_i+1 = rtime_i+1 - stime_i
+	 *            = rtime_i+1 - (rtime_i - utime_i)
+	 *            = (rtime_i+1 - rtime_i) + utime_i
+	 *            >= utime_i
+	 */
+	if (stime < prev->stime)
+		stime = prev->stime;
+	utime = rtime - stime;
+
+	/*
+	 * Make sure utime doesn't go backwards; this still preserves
+	 * monotonicity for stime, analogous argument to above.
+	 */
+	if (utime < prev->utime) {
+		utime = prev->utime;
+		stime = rtime - utime;
+	}
+
+	prev->stime = stime;
+	prev->utime = utime;
 out:
 	*ut = prev->utime;
 	*st = prev->stime;
+	raw_spin_unlock_irqrestore(&prev->lock, flags);
 }
 
 void task_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st)
@@ -633,6 +674,7 @@ void task_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st)
 	task_cputime(p, &cputime.utime, &cputime.stime);
 	cputime_adjust(&cputime, &p->prev_cputime, ut, st);
 }
+EXPORT_SYMBOL_GPL(task_cputime_adjusted);
 
 void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st)
 {
@@ -766,6 +808,9 @@ cputime_t task_gtime(struct task_struct *t)
 {
 	unsigned int seq;
 	cputime_t gtime;
+
+	if (!context_tracking_is_enabled())
+		return t->gtime;
 
 	do {
 		seq = read_seqbegin(&t->vtime_seqlock);

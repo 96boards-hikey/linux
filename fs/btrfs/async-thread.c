@@ -42,8 +42,14 @@ struct __btrfs_workqueue {
 
 	/* Thresholding related variants */
 	atomic_t pending;
-	int max_active;
-	int current_max;
+
+	/* Up limit of concurrency workers */
+	int limit_active;
+
+	/* Current number of concurrency workers */
+	int current_active;
+
+	/* Threshold to change current_active */
 	int thresh;
 	unsigned int count;
 	spinlock_t thres_lock;
@@ -62,6 +68,20 @@ void btrfs_##name(struct work_struct *arg)				\
 	struct btrfs_work *work = container_of(arg, struct btrfs_work,	\
 					       normal_work);		\
 	normal_work_helper(work);					\
+}
+
+bool btrfs_workqueue_normal_congested(struct btrfs_workqueue *wq)
+{
+	/*
+	 * We could compare wq->normal->pending with num_online_cpus()
+	 * to support "thresh == NO_THRESHOLD" case, but it requires
+	 * moving up atomic_inc/dec in thresh_queue/exec_hook. Let's
+	 * postpone it until someone needs the support of that case.
+	 */
+	if (wq->normal->thresh == NO_THRESHOLD)
+		return false;
+
+	return atomic_read(&wq->normal->pending) > wq->normal->thresh * 2;
 }
 
 BTRFS_WORK_HELPER(worker_helper);
@@ -85,9 +105,10 @@ BTRFS_WORK_HELPER(extent_refs_helper);
 BTRFS_WORK_HELPER(scrub_helper);
 BTRFS_WORK_HELPER(scrubwrc_helper);
 BTRFS_WORK_HELPER(scrubnc_helper);
+BTRFS_WORK_HELPER(scrubparity_helper);
 
 static struct __btrfs_workqueue *
-__btrfs_alloc_workqueue(const char *name, int flags, int max_active,
+__btrfs_alloc_workqueue(const char *name, unsigned int flags, int limit_active,
 			 int thresh)
 {
 	struct __btrfs_workqueue *ret = kzalloc(sizeof(*ret), GFP_NOFS);
@@ -95,26 +116,31 @@ __btrfs_alloc_workqueue(const char *name, int flags, int max_active,
 	if (!ret)
 		return NULL;
 
-	ret->max_active = max_active;
+	ret->limit_active = limit_active;
 	atomic_set(&ret->pending, 0);
 	if (thresh == 0)
 		thresh = DFT_THRESHOLD;
 	/* For low threshold, disabling threshold is a better choice */
 	if (thresh < DFT_THRESHOLD) {
-		ret->current_max = max_active;
+		ret->current_active = limit_active;
 		ret->thresh = NO_THRESHOLD;
 	} else {
-		ret->current_max = 1;
+		/*
+		 * For threshold-able wq, let its concurrency grow on demand.
+		 * Use minimal max_active at alloc time to reduce resource
+		 * usage.
+		 */
+		ret->current_active = 1;
 		ret->thresh = thresh;
 	}
 
 	if (flags & WQ_HIGHPRI)
 		ret->normal_wq = alloc_workqueue("%s-%s-high", flags,
-						 ret->max_active,
-						 "btrfs", name);
+						 ret->current_active, "btrfs",
+						 name);
 	else
 		ret->normal_wq = alloc_workqueue("%s-%s", flags,
-						 ret->max_active, "btrfs",
+						 ret->current_active, "btrfs",
 						 name);
 	if (!ret->normal_wq) {
 		kfree(ret);
@@ -132,8 +158,8 @@ static inline void
 __btrfs_destroy_workqueue(struct __btrfs_workqueue *wq);
 
 struct btrfs_workqueue *btrfs_alloc_workqueue(const char *name,
-					      int flags,
-					      int max_active,
+					      unsigned int flags,
+					      int limit_active,
 					      int thresh)
 {
 	struct btrfs_workqueue *ret = kzalloc(sizeof(*ret), GFP_NOFS);
@@ -142,14 +168,14 @@ struct btrfs_workqueue *btrfs_alloc_workqueue(const char *name,
 		return NULL;
 
 	ret->normal = __btrfs_alloc_workqueue(name, flags & ~WQ_HIGHPRI,
-					      max_active, thresh);
+					      limit_active, thresh);
 	if (!ret->normal) {
 		kfree(ret);
 		return NULL;
 	}
 
 	if (flags & WQ_HIGHPRI) {
-		ret->high = __btrfs_alloc_workqueue(name, flags, max_active,
+		ret->high = __btrfs_alloc_workqueue(name, flags, limit_active,
 						    thresh);
 		if (!ret->high) {
 			__btrfs_destroy_workqueue(ret->normal);
@@ -179,7 +205,7 @@ static inline void thresh_queue_hook(struct __btrfs_workqueue *wq)
  */
 static inline void thresh_exec_hook(struct __btrfs_workqueue *wq)
 {
-	int new_max_active;
+	int new_current_active;
 	long pending;
 	int need_change = 0;
 
@@ -196,7 +222,7 @@ static inline void thresh_exec_hook(struct __btrfs_workqueue *wq)
 	wq->count %= (wq->thresh / 4);
 	if (!wq->count)
 		goto  out;
-	new_max_active = wq->current_max;
+	new_current_active = wq->current_active;
 
 	/*
 	 * pending may be changed later, but it's OK since we really
@@ -204,19 +230,19 @@ static inline void thresh_exec_hook(struct __btrfs_workqueue *wq)
 	 */
 	pending = atomic_read(&wq->pending);
 	if (pending > wq->thresh)
-		new_max_active++;
+		new_current_active++;
 	if (pending < wq->thresh / 2)
-		new_max_active--;
-	new_max_active = clamp_val(new_max_active, 1, wq->max_active);
-	if (new_max_active != wq->current_max)  {
+		new_current_active--;
+	new_current_active = clamp_val(new_current_active, 1, wq->limit_active);
+	if (new_current_active != wq->current_active)  {
 		need_change = 1;
-		wq->current_max = new_max_active;
+		wq->current_active = new_current_active;
 	}
 out:
 	spin_unlock(&wq->thres_lock);
 
 	if (need_change) {
-		workqueue_set_max_active(wq->normal_wq, wq->current_max);
+		workqueue_set_max_active(wq->normal_wq, wq->current_active);
 	}
 }
 
@@ -316,8 +342,8 @@ static inline void __btrfs_queue_work(struct __btrfs_workqueue *wq,
 		list_add_tail(&work->ordered_list, &wq->ordered_list);
 		spin_unlock_irqrestore(&wq->list_lock, flags);
 	}
-	queue_work(wq->normal_wq, &work->normal_work);
 	trace_btrfs_work_queued(work);
+	queue_work(wq->normal_wq, &work->normal_work);
 }
 
 void btrfs_queue_work(struct btrfs_workqueue *wq,
@@ -350,13 +376,13 @@ void btrfs_destroy_workqueue(struct btrfs_workqueue *wq)
 	kfree(wq);
 }
 
-void btrfs_workqueue_set_max(struct btrfs_workqueue *wq, int max)
+void btrfs_workqueue_set_max(struct btrfs_workqueue *wq, int limit_active)
 {
 	if (!wq)
 		return;
-	wq->normal->max_active = max;
+	wq->normal->limit_active = limit_active;
 	if (wq->high)
-		wq->high->max_active = max;
+		wq->high->limit_active = limit_active;
 }
 
 void btrfs_set_work_high_priority(struct btrfs_work *work)

@@ -77,6 +77,11 @@ struct kioctx_cpu {
 	unsigned		reqs_available;
 };
 
+struct ctx_rq_wait {
+	struct completion comp;
+	atomic_t count;
+};
+
 struct kioctx {
 	struct percpu_ref	users;
 	atomic_t		dead;
@@ -115,7 +120,7 @@ struct kioctx {
 	/*
 	 * signals when all in-flight requests are done
 	 */
-	struct completion *requests_done;
+	struct ctx_rq_wait	*rq_wait;
 
 	struct {
 		/*
@@ -234,7 +239,12 @@ static struct dentry *aio_mount(struct file_system_type *fs_type,
 	static const struct dentry_operations ops = {
 		.d_dname	= simple_dname,
 	};
-	return mount_pseudo(fs_type, "aio:", NULL, &ops, AIO_RING_MAGIC);
+	struct dentry *root = mount_pseudo(fs_type, "aio:", NULL, &ops,
+					   AIO_RING_MAGIC);
+
+	if (!IS_ERR(root))
+		root->d_sb->s_iflags |= SB_I_NOEXEC;
+	return root;
 }
 
 /* aio_setup
@@ -303,15 +313,9 @@ static void aio_free_ring(struct kioctx *ctx)
 	}
 }
 
-static int aio_ring_mmap(struct file *file, struct vm_area_struct *vma)
+static int aio_ring_mremap(struct vm_area_struct *vma)
 {
-	vma->vm_flags |= VM_DONTEXPAND;
-	vma->vm_ops = &generic_file_vm_ops;
-	return 0;
-}
-
-static int aio_ring_remap(struct file *file, struct vm_area_struct *vma)
-{
+	struct file *file = vma->vm_file;
 	struct mm_struct *mm = vma->vm_mm;
 	struct kioctx_table *table;
 	int i, res = -EINVAL;
@@ -337,9 +341,24 @@ static int aio_ring_remap(struct file *file, struct vm_area_struct *vma)
 	return res;
 }
 
+static const struct vm_operations_struct aio_ring_vm_ops = {
+	.mremap		= aio_ring_mremap,
+#if IS_ENABLED(CONFIG_MMU)
+	.fault		= filemap_fault,
+	.map_pages	= filemap_map_pages,
+	.page_mkwrite	= filemap_page_mkwrite,
+#endif
+};
+
+static int aio_ring_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	vma->vm_flags |= VM_DONTEXPAND;
+	vma->vm_ops = &aio_ring_vm_ops;
+	return 0;
+}
+
 static const struct file_operations aio_ring_fops = {
 	.mmap = aio_ring_mmap,
-	.mremap = aio_ring_remap,
 };
 
 #if IS_ENABLED(CONFIG_MIGRATION)
@@ -572,8 +591,8 @@ static void free_ioctx_reqs(struct percpu_ref *ref)
 	struct kioctx *ctx = container_of(ref, struct kioctx, reqs);
 
 	/* At this point we know that there are no any in-flight requests */
-	if (ctx->requests_done)
-		complete(ctx->requests_done);
+	if (ctx->rq_wait && atomic_dec_and_test(&ctx->rq_wait->count))
+		complete(&ctx->rq_wait->comp);
 
 	INIT_WORK(&ctx->free_work, free_ioctx);
 	schedule_work(&ctx->free_work);
@@ -692,8 +711,7 @@ static struct kioctx *ioctx_alloc(unsigned nr_events)
 	nr_events *= 2;
 
 	/* Prevent overflows */
-	if ((nr_events > (0x10000000U / sizeof(struct io_event))) ||
-	    (nr_events > (0x10000000U / sizeof(struct kiocb)))) {
+	if (nr_events > (0x10000000U / sizeof(struct io_event))) {
 		pr_debug("ENOMEM: nr_events too high\n");
 		return ERR_PTR(-EINVAL);
 	}
@@ -784,7 +802,7 @@ err:
  *	the rapid destruction of the kioctx.
  */
 static int kill_ioctx(struct mm_struct *mm, struct kioctx *ctx,
-		struct completion *requests_done)
+		      struct ctx_rq_wait *wait)
 {
 	struct kioctx_table *table;
 
@@ -814,7 +832,7 @@ static int kill_ioctx(struct mm_struct *mm, struct kioctx *ctx,
 	if (ctx->mmap_size)
 		vm_munmap(ctx->mmap_base, ctx->mmap_size);
 
-	ctx->requests_done = requests_done;
+	ctx->rq_wait = wait;
 	percpu_ref_kill(&ctx->users);
 	return 0;
 }
@@ -830,18 +848,24 @@ static int kill_ioctx(struct mm_struct *mm, struct kioctx *ctx,
 void exit_aio(struct mm_struct *mm)
 {
 	struct kioctx_table *table = rcu_dereference_raw(mm->ioctx_table);
-	int i;
+	struct ctx_rq_wait wait;
+	int i, skipped;
 
 	if (!table)
 		return;
 
+	atomic_set(&wait.count, table->nr);
+	init_completion(&wait.comp);
+
+	skipped = 0;
 	for (i = 0; i < table->nr; ++i) {
 		struct kioctx *ctx = table->table[i];
-		struct completion requests_done =
-			COMPLETION_INITIALIZER_ONSTACK(requests_done);
 
-		if (!ctx)
+		if (!ctx) {
+			skipped++;
 			continue;
+		}
+
 		/*
 		 * We don't need to bother with munmap() here - exit_mmap(mm)
 		 * is coming and it'll unmap everything. And we simply can't,
@@ -850,10 +874,12 @@ void exit_aio(struct mm_struct *mm)
 		 * that it needs to unmap the area, just set it to 0.
 		 */
 		ctx->mmap_size = 0;
-		kill_ioctx(mm, ctx, &requests_done);
+		kill_ioctx(mm, ctx, &wait);
+	}
 
+	if (!atomic_sub_and_test(skipped, &wait.count)) {
 		/* Wait until all IO for the context are done. */
-		wait_for_completion(&requests_done);
+		wait_for_completion(&wait.comp);
 	}
 
 	RCU_INIT_POINTER(mm->ioctx_table, NULL);
@@ -1332,15 +1358,17 @@ SYSCALL_DEFINE1(io_destroy, aio_context_t, ctx)
 {
 	struct kioctx *ioctx = lookup_ioctx(ctx);
 	if (likely(NULL != ioctx)) {
-		struct completion requests_done =
-			COMPLETION_INITIALIZER_ONSTACK(requests_done);
+		struct ctx_rq_wait wait;
 		int ret;
+
+		init_completion(&wait.comp);
+		atomic_set(&wait.count, 1);
 
 		/* Pass requests_done to kill_ioctx() where it can be set
 		 * in a thread-safe way. If we try to set it here then we have
 		 * a race condition if two io_destroy() called simultaneously.
 		 */
-		ret = kill_ioctx(current->mm, ioctx, &requests_done);
+		ret = kill_ioctx(current->mm, ioctx, &wait);
 		percpu_ref_put(&ioctx->users);
 
 		/* Wait until all IO for the context are done. Otherwise kernel
@@ -1348,7 +1376,7 @@ SYSCALL_DEFINE1(io_destroy, aio_context_t, ctx)
 		 * is destroyed.
 		 */
 		if (!ret)
-			wait_for_completion(&requests_done);
+			wait_for_completion(&wait.comp);
 
 		return ret;
 	}
@@ -1356,8 +1384,6 @@ SYSCALL_DEFINE1(io_destroy, aio_context_t, ctx)
 	return -EINVAL;
 }
 
-typedef ssize_t (aio_rw_op)(struct kiocb *, const struct iovec *,
-			    unsigned long, loff_t);
 typedef ssize_t (rw_iter_op)(struct kiocb *, struct iov_iter *);
 
 static int aio_setup_vectored_rw(int rw, char __user *buf, size_t len,
@@ -1386,7 +1412,6 @@ static ssize_t aio_run_iocb(struct kiocb *req, unsigned opcode,
 	ssize_t ret;
 	int rw;
 	fmode_t mode;
-	aio_rw_op *rw_op;
 	rw_iter_op *iter_op;
 	struct iovec inline_vecs[UIO_FASTIOV], *iovec = inline_vecs;
 	struct iov_iter iter;
@@ -1396,7 +1421,6 @@ static ssize_t aio_run_iocb(struct kiocb *req, unsigned opcode,
 	case IOCB_CMD_PREADV:
 		mode	= FMODE_READ;
 		rw	= READ;
-		rw_op	= file->f_op->aio_read;
 		iter_op	= file->f_op->read_iter;
 		goto rw_common;
 
@@ -1404,14 +1428,13 @@ static ssize_t aio_run_iocb(struct kiocb *req, unsigned opcode,
 	case IOCB_CMD_PWRITEV:
 		mode	= FMODE_WRITE;
 		rw	= WRITE;
-		rw_op	= file->f_op->aio_write;
 		iter_op	= file->f_op->write_iter;
 		goto rw_common;
 rw_common:
 		if (unlikely(!(file->f_mode & mode)))
 			return -EBADF;
 
-		if (!rw_op && !iter_op)
+		if (!iter_op)
 			return -EINVAL;
 
 		if (opcode == IOCB_CMD_PREADV || opcode == IOCB_CMD_PWRITEV)
@@ -1431,21 +1454,10 @@ rw_common:
 
 		len = ret;
 
-		/* XXX: move/kill - rw_verify_area()? */
-		/* This matches the pread()/pwrite() logic */
-		if (req->ki_pos < 0) {
-			ret = -EINVAL;
-			break;
-		}
-
 		if (rw == WRITE)
 			file_start_write(file);
 
-		if (iter_op) {
-			ret = iter_op(req, &iter);
-		} else {
-			ret = rw_op(req, iter.iov, iter.nr_segs, req->ki_pos);
-		}
+		ret = iter_op(req, &iter);
 
 		if (rw == WRITE)
 			file_end_write(file);
@@ -1519,7 +1531,7 @@ static int io_submit_one(struct kioctx *ctx, struct iocb __user *user_iocb,
 	}
 	req->common.ki_pos = iocb->aio_offset;
 	req->common.ki_complete = aio_complete;
-	req->common.ki_flags = 0;
+	req->common.ki_flags = iocb_flags(req->common.ki_filp);
 
 	if (iocb->aio_flags & IOCB_FLAG_RESFD) {
 		/*

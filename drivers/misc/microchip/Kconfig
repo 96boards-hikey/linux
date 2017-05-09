@@ -1,0 +1,7 @@
+#
+# Microchip devices
+#
+
+menu "Microchip devices"
+source "drivers/misc/microchip/hub/Kconfig"
+endmenu

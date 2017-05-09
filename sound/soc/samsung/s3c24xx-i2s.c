@@ -32,13 +32,13 @@
 #include "s3c24xx-i2s.h"
 
 static struct s3c_dma_params s3c24xx_i2s_pcm_stereo_out = {
-	.channel	= DMACH_I2S_OUT,
+	.slave		= (void *)(uintptr_t)DMACH_I2S_OUT,
 	.ch_name	= "tx",
 	.dma_size	= 2,
 };
 
 static struct s3c_dma_params s3c24xx_i2s_pcm_stereo_in = {
-	.channel	= DMACH_I2S_IN,
+	.slave		= (void *)(uintptr_t)DMACH_I2S_IN,
 	.ch_name	= "rx",
 	.dma_size	= 2,
 };
@@ -461,8 +461,8 @@ static int s3c24xx_iis_dev_probe(struct platform_device *pdev)
 		return -ENOENT;
 	}
 	s3c24xx_i2s.regs = devm_ioremap_resource(&pdev->dev, res);
-	if (s3c24xx_i2s.regs == NULL)
-		return -ENXIO;
+	if (IS_ERR(s3c24xx_i2s.regs))
+		return PTR_ERR(s3c24xx_i2s.regs);
 
 	s3c24xx_i2s_pcm_stereo_out.dma_addr = res->start + S3C2410_IISFIFO;
 	s3c24xx_i2s_pcm_stereo_in.dma_addr = res->start + S3C2410_IISFIFO;

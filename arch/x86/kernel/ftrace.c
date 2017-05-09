@@ -81,9 +81,9 @@ within(unsigned long addr, unsigned long start, unsigned long end)
 static unsigned long text_ip_addr(unsigned long ip)
 {
 	/*
-	 * On x86_64, kernel text mappings are mapped read-only with
-	 * CONFIG_DEBUG_RODATA. So we use the kernel identity mapping instead
-	 * of the kernel text mapping to modify the kernel text.
+	 * On x86_64, kernel text mappings are mapped read-only, so we use
+	 * the kernel identity mapping instead of the kernel text mapping
+	 * to modify the kernel text.
 	 *
 	 * For 32bit kernels, these mappings are same and we can use
 	 * kernel identity mapping to modify code.
@@ -556,6 +556,7 @@ void ftrace_replace_code(int enable)
 	run_sync();
 
 	report = "updating code";
+	count = 0;
 
 	for_ftrace_rec_iter(iter) {
 		rec = ftrace_rec_iter_record(iter);
@@ -563,11 +564,13 @@ void ftrace_replace_code(int enable)
 		ret = add_update(rec, enable);
 		if (ret)
 			goto remove_breakpoints;
+		count++;
 	}
 
 	run_sync();
 
 	report = "removing breakpoints";
+	count = 0;
 
 	for_ftrace_rec_iter(iter) {
 		rec = ftrace_rec_iter_record(iter);
@@ -575,6 +578,7 @@ void ftrace_replace_code(int enable)
 		ret = finish_update(rec, enable);
 		if (ret)
 			goto remove_breakpoints;
+		count++;
 	}
 
 	run_sync();

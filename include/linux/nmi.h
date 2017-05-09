@@ -14,8 +14,11 @@
  * may be used to reset the timeout - for code which intentionally
  * disables interrupts for a long time. This call is stateless.
  */
-#if defined(CONFIG_HAVE_NMI_WATCHDOG) || defined(CONFIG_HARDLOCKUP_DETECTOR)
+#if defined(CONFIG_HAVE_NMI_WATCHDOG) || defined(CONFIG_HARDLOCKUP_DETECTOR_NMI)
 #include <asm/nmi.h>
+#endif
+
+#if defined(CONFIG_HAVE_NMI_WATCHDOG) || defined(CONFIG_HARDLOCKUP_DETECTOR)
 extern void touch_nmi_watchdog(void);
 #else
 static inline void touch_nmi_watchdog(void)
@@ -27,9 +30,7 @@ static inline void touch_nmi_watchdog(void)
 #if defined(CONFIG_HARDLOCKUP_DETECTOR)
 extern void hardlockup_detector_disable(void);
 #else
-static inline void hardlockup_detector_disable(void)
-{
-}
+static inline void hardlockup_detector_disable(void) {}
 #endif
 
 /*
@@ -49,6 +50,12 @@ static inline bool trigger_allbutself_cpu_backtrace(void)
 	arch_trigger_all_cpu_backtrace(false);
 	return true;
 }
+
+/* generic implementation */
+void nmi_trigger_all_cpu_backtrace(bool include_self,
+				   void (*raise)(cpumask_t *mask));
+bool nmi_cpu_backtrace(struct pt_regs *regs);
+
 #else
 static inline bool trigger_all_cpu_backtrace(void)
 {
@@ -67,7 +74,9 @@ extern int nmi_watchdog_enabled;
 extern int soft_watchdog_enabled;
 extern int watchdog_user_enabled;
 extern int watchdog_thresh;
+extern unsigned long *watchdog_cpumask_bits;
 extern int sysctl_softlockup_all_cpu_backtrace;
+extern int sysctl_hardlockup_all_cpu_backtrace;
 struct ctl_table;
 extern int proc_watchdog(struct ctl_table *, int ,
 			 void __user *, size_t *, loff_t *);
@@ -77,6 +86,19 @@ extern int proc_soft_watchdog(struct ctl_table *, int ,
 			      void __user *, size_t *, loff_t *);
 extern int proc_watchdog_thresh(struct ctl_table *, int ,
 				void __user *, size_t *, loff_t *);
+extern int proc_watchdog_cpumask(struct ctl_table *, int,
+				 void __user *, size_t *, loff_t *);
+extern int lockup_detector_suspend(void);
+extern void lockup_detector_resume(void);
+#else
+static inline int lockup_detector_suspend(void)
+{
+	return 0;
+}
+
+static inline void lockup_detector_resume(void)
+{
+}
 #endif
 
 #ifdef CONFIG_HAVE_ACPI_APEI_NMI

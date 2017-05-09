@@ -379,7 +379,7 @@ void rtw_cfg80211_indicate_disconnect(struct rtw_adapter *padapter)
 						GFP_ATOMIC);
 		} else {
 			cfg80211_disconnected(padapter->pnetdev, 0, NULL,
-					      0, GFP_ATOMIC);
+					      0, false, GFP_ATOMIC);
 		}
 	}
 }
@@ -1041,7 +1041,7 @@ static u16 rtw_get_cur_max_rate(struct rtw_adapter *adapter)
 		while (pcur_bss->SupportedRates[i] != 0 &&
 		       pcur_bss->SupportedRates[i] != 0xFF) {
 			rate = pcur_bss->SupportedRates[i] & 0x7F;
-			if (rate>max_rate)
+			if (rate > max_rate)
 				max_rate = rate;
 			i++;
 		}
@@ -2574,6 +2574,7 @@ static const struct net_device_ops rtw_cfg80211_monitor_if_ops = {
 };
 
 static int rtw_cfg80211_add_monitor_if(struct rtw_adapter *padapter, char *name,
+				       unsigned char name_assign_type,
 				       struct net_device **ndev)
 {
 	int ret = 0;
@@ -2606,6 +2607,7 @@ static int rtw_cfg80211_add_monitor_if(struct rtw_adapter *padapter, char *name,
 	mon_ndev->type = ARPHRD_IEEE80211_RADIOTAP;
 	strncpy(mon_ndev->name, name, IFNAMSIZ);
 	mon_ndev->name[IFNAMSIZ - 1] = 0;
+	mon_ndev->name_assign_type = name_assign_type;
 	mon_ndev->destructor = rtw_ndev_destructor;
 
 	mon_ndev->netdev_ops = &rtw_cfg80211_monitor_if_ops;
@@ -2648,6 +2650,7 @@ out:
 
 static struct wireless_dev *
 cfg80211_rtw_add_virtual_intf(struct wiphy *wiphy, const char *name,
+			      unsigned char name_assign_type,
 			      enum nl80211_iftype type, u32 *flags,
 			      struct vif_params *params)
 {
@@ -2667,7 +2670,8 @@ cfg80211_rtw_add_virtual_intf(struct wiphy *wiphy, const char *name,
 		break;
 	case NL80211_IFTYPE_MONITOR:
 		ret =
-		    rtw_cfg80211_add_monitor_if(padapter, (char *)name, &ndev);
+		    rtw_cfg80211_add_monitor_if(padapter, (char *)name,
+						name_assign_type, &ndev);
 		break;
 
 	case NL80211_IFTYPE_P2P_CLIENT:

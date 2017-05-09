@@ -106,8 +106,6 @@ linux_gateway_entry:
 	mtsp	%r0,%sr4			/* get kernel space into sr4 */
 	mtsp	%r0,%sr5			/* get kernel space into sr5 */
 	mtsp	%r0,%sr6			/* get kernel space into sr6 */
-	mfsp    %sr7,%r1                        /* save user sr7 */
-	mtsp    %r1,%sr3                        /* and store it in sr3 */
 
 #ifdef CONFIG_64BIT
 	/* for now we can *always* set the W bit on entry to the syscall
@@ -133,6 +131,14 @@ linux_gateway_entry:
 	depdi	0, 31, 32, %r21
 1:	
 #endif
+
+	/* We use a rsm/ssm pair to prevent sr3 from being clobbered
+	 * by external interrupts.
+	 */
+	mfsp    %sr7,%r1                        /* save user sr7 */
+	rsm	PSW_SM_I, %r0			/* disable interrupts */
+	mtsp    %r1,%sr3                        /* and store it in sr3 */
+
 	mfctl   %cr30,%r1
 	xor     %r1,%r30,%r30                   /* ye olde xor trick */
 	xor     %r1,%r30,%r1
@@ -147,6 +153,7 @@ linux_gateway_entry:
 	 */
 
 	mtsp	%r0,%sr7			/* get kernel space into sr7 */
+	ssm	PSW_SM_I, %r0			/* enable interrupts */
 	STREGM	%r1,FRAME_SIZE(%r30)		/* save r1 (usp) here for now */
 	mfctl	%cr30,%r1			/* get task ptr in %r1 */
 	LDREG	TI_TASK(%r1),%r1
@@ -343,7 +350,7 @@ tracesys_next:
 #endif
 
 	comiclr,>>=	__NR_Linux_syscalls, %r20, %r0
-	b,n	.Lsyscall_nosys
+	b,n	.Ltracesys_nosys
 
 	LDREGX  %r20(%r19), %r19
 
@@ -359,6 +366,9 @@ tracesys_next:
 	be      0(%sr7,%r19)
 	ldo	R%tracesys_exit(%r2),%r2
 
+.Ltracesys_nosys:
+	ldo	-ENOSYS(%r0),%r28		/* set errno */
+
 	/* Do *not* call this function on the gateway page, because it
 	makes a direct call to syscall_trace. */
 	
@@ -369,7 +379,7 @@ tracesys_exit:
 	ldo	-16(%r30),%r29			/* Reference param save area */
 #endif
 	ldo	TASK_REGS(%r1),%r26
-	bl	do_syscall_trace_exit,%r2
+	BL	do_syscall_trace_exit,%r2
 	STREG   %r28,TASK_PT_GR28(%r1)          /* save return value now */
 	ldo     -THREAD_SZ_ALGN-FRAME_SIZE(%r30),%r1      /* get task ptr */
 	LDREG	TI_TASK(%r1), %r1
@@ -390,7 +400,7 @@ tracesys_sigexit:
 #ifdef CONFIG_64BIT
 	ldo	-16(%r30),%r29			/* Reference param save area */
 #endif
-	bl	do_syscall_trace_exit,%r2
+	BL	do_syscall_trace_exit,%r2
 	ldo	TASK_REGS(%r1),%r26
 
 	ldil	L%syscall_exit_rfi,%r1
@@ -821,7 +831,7 @@ cas2_action:
 	/* 64bit CAS */
 #ifdef CONFIG_64BIT
 19:	ldd,ma	0(%sr3,%r26), %r29
-	sub,=	%r29, %r25, %r0
+	sub,*=	%r29, %r25, %r0
 	b,n	cas2_end
 20:	std,ma	%r24, 0(%sr3,%r26)
 	copy	%r0, %r28

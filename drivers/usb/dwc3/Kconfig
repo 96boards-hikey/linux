@@ -11,6 +11,13 @@ config USB_DWC3
 
 if USB_DWC3
 
+config USB_DWC3_ULPI
+	bool "Register ULPI PHY Interface"
+	depends on USB_ULPI_BUS=y || USB_ULPI_BUS=USB_DWC3
+	help
+	  Select this if you have ULPI type PHY attached to your DWC3
+	  controller.
+
 choice
 	bool "DWC3 Mode Selection"
 	default USB_DWC3_DUAL_ROLE if (USB && USB_GADGET)
@@ -96,12 +103,28 @@ config USB_DWC3_QCOM
 	help
 	  Recent Qualcomm SoCs ship with one DesignWare Core USB3 IP inside,
 	  say 'Y' or 'M' if you have one such device.
-
-comment "Debugging features"
-
-config USB_DWC3_DEBUG
-	bool "Enable Debugging Messages"
+	  
+config USB_DWC3_HISI
+	tristate "Hisilicon Platforms"
+	select USB_DWC3_OTG
+	default USB_DWC3
 	help
-	  Say Y here to enable debugging messages on DWC3 Driver.
+	  Support of USB2/3 functionality in hisilicon platforms,
+	  Say 'Y' or 'M' here if you have one such device.
 
+config HISI_USB_DWC3_MASK_IRQ_WORKAROUND
+	bool "Enable workaround for hisi dwc3 mask irq bug"
+	depends on USB_DWC3_HISI
+	default n
+	help
+	  For some hisi dwc3, masking dwc3 irq can't work well.
+	  Say Y here if you have such problem.
+
+comment "Other features"
+
+config USB_DWC3_OTG
+	bool "Enable DWC3 OTG"
+	default n
+	help
+	  Say Y here to enable DWC3 OTG feature.
 endif

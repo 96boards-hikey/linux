@@ -17,8 +17,10 @@
 
 #include <linux/platform_device.h>
 #include <linux/usb/xhci_pdriver.h>
-
+#include <linux/dma-mapping.h>
 #include "core.h"
+
+extern void arch_setup_archdata(struct platform_device *pdev);
 
 int dwc3_host_init(struct dwc3 *dwc)
 {
@@ -26,6 +28,7 @@ int dwc3_host_init(struct dwc3 *dwc)
 	struct usb_xhci_pdata	pdata;
 	int			ret;
 
+       dev_err(dwc->dev, "%s enter.\n", __func__);
 	xhci = platform_device_alloc("xhci-hcd", PLATFORM_DEVID_AUTO);
 	if (!xhci) {
 		dev_err(dwc->dev, "couldn't allocate xHCI device\n");
@@ -46,6 +49,14 @@ int dwc3_host_init(struct dwc3 *dwc)
 		dev_err(dwc->dev, "couldn't add resources to xHCI device\n");
 		goto err1;
 	}
+
+#ifdef CONFIG_USB_DWC3_HISI
+	/* if otg, otg will do device_add */
+	if (dwc->dwc_otg){
+		dev_err(dwc->dev, "%s if otg, otg will do device_add.\n", __func__);
+		return 0;
+	}
+#endif
 
 	memset(&pdata, 0, sizeof(pdata));
 
@@ -68,6 +79,7 @@ int dwc3_host_init(struct dwc3 *dwc)
 		goto err2;
 	}
 
+       dev_err(dwc->dev, "%s out.\n", __func__);
 	return 0;
 err2:
 	phy_remove_lookup(dwc->usb2_generic_phy, "usb2-phy",
@@ -76,11 +88,16 @@ err2:
 			  dev_name(&xhci->dev));
 err1:
 	platform_device_put(xhci);
+	 dev_err(dwc->dev, "%s error:%d.\n", __func__, ret);
 	return ret;
 }
 
 void dwc3_host_exit(struct dwc3 *dwc)
 {
+#ifdef CONFIG_USB_DWC3_HISI
+	if (dwc->dwc_otg)
+		return;
+#endif
 	phy_remove_lookup(dwc->usb2_generic_phy, "usb2-phy",
 			  dev_name(&dwc->xhci->dev));
 	phy_remove_lookup(dwc->usb3_generic_phy, "usb3-phy",

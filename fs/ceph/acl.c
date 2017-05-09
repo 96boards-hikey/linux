@@ -94,11 +94,9 @@ int ceph_set_acl(struct inode *inode, struct posix_acl *acl, int type)
 	case ACL_TYPE_ACCESS:
 		name = POSIX_ACL_XATTR_ACCESS;
 		if (acl) {
-			ret = posix_acl_equiv_mode(acl, &new_mode);
-			if (ret < 0)
+			ret = posix_acl_update_mode(inode, &new_mode, &acl);
+			if (ret)
 				goto out;
-			if (ret == 0)
-				acl = NULL;
 		}
 		break;
 	case ACL_TYPE_DEFAULT:
@@ -187,10 +185,10 @@ int ceph_pre_init_acls(struct inode *dir, umode_t *mode,
 		val_size2 = posix_acl_xattr_size(default_acl->a_count);
 
 	err = -ENOMEM;
-	tmp_buf = kmalloc(max(val_size1, val_size2), GFP_NOFS);
+	tmp_buf = kmalloc(max(val_size1, val_size2), GFP_KERNEL);
 	if (!tmp_buf)
 		goto out_err;
-	pagelist = kmalloc(sizeof(struct ceph_pagelist), GFP_NOFS);
+	pagelist = kmalloc(sizeof(struct ceph_pagelist), GFP_KERNEL);
 	if (!pagelist)
 		goto out_err;
 	ceph_pagelist_init(pagelist);

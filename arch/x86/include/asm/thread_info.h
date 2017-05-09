@@ -27,14 +27,17 @@
  * Without this offset, that can result in a page fault.  (We are
  * careful that, in this case, the value we read doesn't matter.)
  *
- * In vm86 mode, the hardware frame is much longer still, but we neither
- * access the extra members from NMI context, nor do we write such a
- * frame at sp0 at all.
+ * In vm86 mode, the hardware frame is much longer still, so add 16
+ * bytes to make room for the real-mode segments.
  *
  * x86_64 has a fixed-length stack frame.
  */
 #ifdef CONFIG_X86_32
-# define TOP_OF_KERNEL_STACK_PADDING 8
+# ifdef CONFIG_VM86
+#  define TOP_OF_KERNEL_STACK_PADDING 16
+# else
+#  define TOP_OF_KERNEL_STACK_PADDING 8
+# endif
 #else
 # define TOP_OF_KERNEL_STACK_PADDING 0
 #endif
@@ -46,19 +49,15 @@
  */
 #ifndef __ASSEMBLY__
 struct task_struct;
-struct exec_domain;
 #include <asm/processor.h>
 #include <linux/atomic.h>
 
 struct thread_info {
 	struct task_struct	*task;		/* main task structure */
-	struct exec_domain	*exec_domain;	/* execution domain */
 	__u32			flags;		/* low level flags */
 	__u32			status;		/* thread synchronous flags */
 	__u32			cpu;		/* current CPU */
-	int			saved_preempt_count;
 	mm_segment_t		addr_limit;
-	void __user		*sysenter_return;
 	unsigned int		sig_on_uaccess_error:1;
 	unsigned int		uaccess_err:1;	/* uaccess failed */
 };
@@ -66,10 +65,8 @@ struct thread_info {
 #define INIT_THREAD_INFO(tsk)			\
 {						\
 	.task		= &tsk,			\
-	.exec_domain	= &default_exec_domain,	\
 	.flags		= 0,			\
 	.cpu		= 0,			\
-	.saved_preempt_count = INIT_PREEMPT_COUNT,	\
 	.addr_limit	= KERNEL_DS,		\
 }
 
@@ -143,26 +140,10 @@ struct thread_info {
 	 _TIF_SECCOMP | _TIF_SINGLESTEP | _TIF_SYSCALL_TRACEPOINT |	\
 	 _TIF_NOHZ)
 
-/* work to do in syscall_trace_leave() */
-#define _TIF_WORK_SYSCALL_EXIT	\
-	(_TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT | _TIF_SINGLESTEP |	\
-	 _TIF_SYSCALL_TRACEPOINT | _TIF_NOHZ)
-
-/* work to do on interrupt/exception return */
-#define _TIF_WORK_MASK							\
-	(0x0000FFFF &							\
-	 ~(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT|			\
-	   _TIF_SINGLESTEP|_TIF_SECCOMP|_TIF_SYSCALL_EMU))
-
 /* work to do on any return to user space */
 #define _TIF_ALLWORK_MASK						\
 	((0x0000FFFF & ~_TIF_SECCOMP) | _TIF_SYSCALL_TRACEPOINT |	\
 	_TIF_NOHZ)
-
-/* Only used for 64 bit */
-#define _TIF_DO_NOTIFY_MASK						\
-	(_TIF_SIGPENDING | _TIF_NOTIFY_RESUME |				\
-	 _TIF_USER_RETURN_NOTIFY | _TIF_UPROBE)
 
 /* flags to check in __switch_to() */
 #define _TIF_WORK_CTXSW							\
@@ -180,8 +161,6 @@ struct thread_info {
  */
 #ifndef __ASSEMBLY__
 
-DECLARE_PER_CPU(unsigned long, kernel_stack);
-
 static inline struct thread_info *current_thread_info(void)
 {
 	return (struct thread_info *)(current_top_of_stack() - THREAD_SIZE);
@@ -198,11 +177,59 @@ static inline unsigned long current_stack_pointer(void)
 	return sp;
 }
 
+/*
+ * Walks up the stack frames to make sure that the specified object is
+ * entirely contained by a single stack frame.
+ *
+ * Returns:
+ *		 1 if within a frame
+ *		-1 if placed across a frame boundary (or outside stack)
+ *		 0 unable to determine (no frame pointers, etc)
+ */
+static inline int arch_within_stack_frames(const void * const stack,
+					   const void * const stackend,
+					   const void *obj, unsigned long len)
+{
+#if defined(CONFIG_FRAME_POINTER)
+	const void *frame = NULL;
+	const void *oldframe;
+
+	oldframe = __builtin_frame_address(1);
+	if (oldframe)
+		frame = __builtin_frame_address(2);
+	/*
+	 * low ----------------------------------------------> high
+	 * [saved bp][saved ip][args][local vars][saved bp][saved ip]
+	 *                     ^----------------^
+	 *               allow copies only within here
+	 */
+	while (stack <= frame && frame < stackend) {
+		/*
+		 * If obj + len extends past the last frame, this
+		 * check won't pass and the next frame will be 0,
+		 * causing us to bail out and correctly report
+		 * the copy as invalid.
+		 */
+		if (obj + len <= frame)
+			return obj >= oldframe + 2 * sizeof(void *) ? 1 : -1;
+		oldframe = frame;
+		frame = *(const void * const *)frame;
+	}
+	return -1;
+#else
+	return 0;
+#endif
+}
+
 #else /* !__ASSEMBLY__ */
+
+#ifdef CONFIG_X86_64
+# define cpu_current_top_of_stack (cpu_tss + TSS_sp0)
+#endif
 
 /* Load thread_info address into "reg" */
 #define GET_THREAD_INFO(reg) \
-	_ASM_MOV PER_CPU_VAR(kernel_stack),reg ; \
+	_ASM_MOV PER_CPU_VAR(cpu_current_top_of_stack),reg ; \
 	_ASM_SUB $(THREAD_SIZE),reg ;
 
 /*

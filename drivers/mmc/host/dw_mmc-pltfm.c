@@ -63,6 +63,9 @@ int dw_mci_pltfm_register(struct platform_device *pdev,
 	if (IS_ERR(host->regs))
 		return PTR_ERR(host->regs);
 
+	/* Get registers' physical base address */
+	host->phy_regs = regs->start;
+
 	platform_set_drvdata(pdev, host);
 	return dw_mci_probe(host);
 }

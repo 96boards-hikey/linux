@@ -207,12 +207,17 @@ static const u8 *mipi_exec_gpio(struct intel_dsi *intel_dsi, const u8 *data)
 	gpio = *data++;
 
 	/* pull up/down */
-	action = *data++;
+	action = *data++ & 1;
+
+	if (gpio >= ARRAY_SIZE(gtable)) {
+		DRM_DEBUG_KMS("unknown gpio %u\n", gpio);
+		goto out;
+	}
 
 	function = gtable[gpio].function_reg;
 	pad = gtable[gpio].pad_reg;
 
-	mutex_lock(&dev_priv->dpio_lock);
+	mutex_lock(&dev_priv->sb_lock);
 	if (!gtable[gpio].init) {
 		/* program the function */
 		/* FIXME: remove constant below */
@@ -224,8 +229,9 @@ static const u8 *mipi_exec_gpio(struct intel_dsi *intel_dsi, const u8 *data)
 
 	/* pull up/down */
 	vlv_gpio_nc_write(dev_priv, pad, val);
-	mutex_unlock(&dev_priv->dpio_lock);
+	mutex_unlock(&dev_priv->sb_lock);
 
+out:
 	return data;
 }
 

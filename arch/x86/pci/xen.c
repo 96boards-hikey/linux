@@ -179,7 +179,7 @@ static int xen_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
 	if (ret)
 		goto error;
 	i = 0;
-	list_for_each_entry(msidesc, &dev->msi_list, list) {
+	for_each_pci_msi_entry(msidesc, dev) {
 		irq = xen_bind_pirq_msi_to_irq(dev, msidesc, v[i],
 					       (type == PCI_CAP_ID_MSI) ? nvec : 1,
 					       (type == PCI_CAP_ID_MSIX) ?
@@ -230,24 +230,15 @@ static int xen_hvm_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
 	if (type == PCI_CAP_ID_MSI && nvec > 1)
 		return 1;
 
-	list_for_each_entry(msidesc, &dev->msi_list, list) {
-		__pci_read_msi_msg(msidesc, &msg);
-		pirq = MSI_ADDR_EXT_DEST_ID(msg.address_hi) |
-			((msg.address_lo >> MSI_ADDR_DEST_ID_SHIFT) & 0xff);
-		if (msg.data != XEN_PIRQ_MSI_DATA ||
-		    xen_irq_from_pirq(pirq) < 0) {
-			pirq = xen_allocate_pirq_msi(dev, msidesc);
-			if (pirq < 0) {
-				irq = -ENODEV;
-				goto error;
-			}
-			xen_msi_compose_msg(dev, pirq, &msg);
-			__pci_write_msi_msg(msidesc, &msg);
-			dev_dbg(&dev->dev, "xen: msi bound to pirq=%d\n", pirq);
-		} else {
-			dev_dbg(&dev->dev,
-				"xen: msi already bound to pirq=%d\n", pirq);
+	for_each_pci_msi_entry(msidesc, dev) {
+		pirq = xen_allocate_pirq_msi(dev, msidesc);
+		if (pirq < 0) {
+			irq = -ENODEV;
+			goto error;
 		}
+		xen_msi_compose_msg(dev, pirq, &msg);
+		__pci_write_msi_msg(msidesc, &msg);
+		dev_dbg(&dev->dev, "xen: msi bound to pirq=%d\n", pirq);
 		irq = xen_bind_pirq_msi_to_irq(dev, msidesc, pirq,
 					       (type == PCI_CAP_ID_MSI) ? nvec : 1,
 					       (type == PCI_CAP_ID_MSIX) ?
@@ -274,7 +265,7 @@ static int xen_initdom_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
 	int ret = 0;
 	struct msi_desc *msidesc;
 
-	list_for_each_entry(msidesc, &dev->msi_list, list) {
+	for_each_pci_msi_entry(msidesc, dev) {
 		struct physdev_map_pirq map_irq;
 		domid_t domid;
 
@@ -386,7 +377,7 @@ static void xen_teardown_msi_irqs(struct pci_dev *dev)
 {
 	struct msi_desc *msidesc;
 
-	msidesc = list_entry(dev->msi_list.next, struct msi_desc, list);
+	msidesc = first_pci_msi_entry(dev);
 	if (msidesc->msi_attrib.is_msix)
 		xen_pci_frontend_disable_msix(dev);
 	else
@@ -488,8 +479,11 @@ int __init pci_xen_initial_domain(void)
 #endif
 	__acpi_register_gsi = acpi_register_gsi_xen;
 	__acpi_unregister_gsi = NULL;
-	/* Pre-allocate legacy irqs */
-	for (irq = 0; irq < nr_legacy_irqs(); irq++) {
+	/*
+	 * Pre-allocate the legacy IRQs.  Use NR_LEGACY_IRQS here
+	 * because we don't have a PIC and thus nr_legacy_irqs() is zero.
+	 */
+	for (irq = 0; irq < NR_IRQS_LEGACY; irq++) {
 		int trigger, polarity;
 
 		if (acpi_get_override_irq(irq, &trigger, &polarity) == -1)

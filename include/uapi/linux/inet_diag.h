@@ -72,6 +72,8 @@ enum {
 	INET_DIAG_BC_AUTO,
 	INET_DIAG_BC_S_COND,
 	INET_DIAG_BC_D_COND,
+	INET_DIAG_BC_DEV_COND,   /* u32 ifindex */
+	INET_DIAG_BC_MARK_COND,
 };
 
 struct inet_diag_hostcond {
@@ -79,6 +81,11 @@ struct inet_diag_hostcond {
 	__u8	prefix_len;
 	int	port;
 	__be32	addr[0];
+};
+
+struct inet_diag_markcond {
+	__u32 mark;
+	__u32 mask;
 };
 
 /* Base info structure. It contains socket identity (addrs/ports/cookie)
@@ -111,9 +118,15 @@ enum {
 	INET_DIAG_SKMEMINFO,
 	INET_DIAG_SHUTDOWN,
 	INET_DIAG_DCTCPINFO,
+	INET_DIAG_PROTOCOL,  /* response attribute only */
+	INET_DIAG_SKV6ONLY,
+	INET_DIAG_LOCALS,
+	INET_DIAG_PEERS,
+	INET_DIAG_PAD,
+	INET_DIAG_MARK,
 };
 
-#define INET_DIAG_MAX INET_DIAG_DCTCPINFO
+#define INET_DIAG_MAX INET_DIAG_MARK
 
 /* INET_DIAG_MEM */
 
@@ -143,4 +156,8 @@ struct tcp_dctcp_info {
 	__u32	dctcp_ab_tot;
 };
 
+union tcp_cc_info {
+	struct tcpvegas_info	vegas;
+	struct tcp_dctcp_info	dctcp;
+};
 #endif /* _UAPI_INET_DIAG_H_ */

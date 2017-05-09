@@ -18,10 +18,12 @@ ifeq ($(CONFIG_SYSFS),y)
 obj-$(CONFIG_MODULES)	+= module.o
 endif
 obj-$(CONFIG_SYS_HYPERVISOR) += hypervisor.o
-obj-$(CONFIG_REGMAP)	+= regmap/
+#obj-$(CONFIG_REGMAP)	+= regmap/
+obj-y			+= regmap/
 obj-$(CONFIG_SOC_BUS) += soc.o
 obj-$(CONFIG_PINCTRL) += pinctrl.o
 obj-$(CONFIG_DEV_COREDUMP) += devcoredump.o
+obj-$(CONFIG_GENERIC_MSI_IRQ_DOMAIN) += platform-msi.o
 
 ccflags-$(CONFIG_DEBUG_DRIVER) := -DDEBUG
 

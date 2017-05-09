@@ -81,6 +81,11 @@ int unregister_tcf_proto_ops(struct tcf_proto_ops *ops)
 	struct tcf_proto_ops *t;
 	int rc = -ENOENT;
 
+	/* Wait for outstanding call_rcu()s, if any, from a
+	 * tcf_proto_ops's destroy() handler.
+	 */
+	rcu_barrier();
+
 	write_lock(&cls_mod_lock);
 	list_for_each_entry(t, &tcf_proto_base, head) {
 		if (t == ops) {
@@ -132,13 +137,15 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n)
 	unsigned long cl;
 	unsigned long fh;
 	int err;
-	int tp_created = 0;
+	int tp_created;
 
 	if ((n->nlmsg_type != RTM_GETTFILTER) &&
 	    !netlink_ns_capable(skb, net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
 replay:
+	tp_created = 0;
+
 	err = nlmsg_parse(n, sizeof(*t), tca, TCA_MAX, NULL);
 	if (err < 0)
 		return err;
@@ -286,7 +293,7 @@ replay:
 			RCU_INIT_POINTER(*back, next);
 
 			tfilter_notify(net, skb, n, tp, fh, RTM_DELTFILTER);
-			tcf_destroy(tp);
+			tcf_destroy(tp, true);
 			err = 0;
 			goto errout;
 		}
@@ -301,14 +308,20 @@ replay:
 			err = -EEXIST;
 			if (n->nlmsg_flags & NLM_F_EXCL) {
 				if (tp_created)
-					tcf_destroy(tp);
+					tcf_destroy(tp, true);
 				goto errout;
 			}
 			break;
 		case RTM_DELTFILTER:
 			err = tp->ops->delete(tp, fh);
-			if (err == 0)
-				tfilter_notify(net, skb, n, tp, fh, RTM_DELTFILTER);
+			if (err == 0) {
+				struct tcf_proto *next = rtnl_dereference(tp->next);
+
+				tfilter_notify(net, skb, n, tp,
+					       t->tcm_handle, RTM_DELTFILTER);
+				if (tcf_destroy(tp, false))
+					RCU_INIT_POINTER(*back, next);
+			}
 			goto errout;
 		case RTM_GETTFILTER:
 			err = tfilter_notify(net, skb, n, tp, fh, RTM_NEWTFILTER);
@@ -329,7 +342,7 @@ replay:
 		tfilter_notify(net, skb, n, tp, fh, RTM_NEWTFILTER);
 	} else {
 		if (tp_created)
-			tcf_destroy(tp);
+			tcf_destroy(tp, true);
 	}
 
 errout:

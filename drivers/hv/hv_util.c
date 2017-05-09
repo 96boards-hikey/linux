@@ -283,10 +283,14 @@ static void heartbeat_onchannelcallback(void *context)
 	u8 *hbeat_txf_buf = util_heartbeat.recv_buffer;
 	struct icmsg_negotiate *negop = NULL;
 
-	vmbus_recvpacket(channel, hbeat_txf_buf,
-			 PAGE_SIZE, &recvlen, &requestid);
+	while (1) {
 
-	if (recvlen > 0) {
+		vmbus_recvpacket(channel, hbeat_txf_buf,
+				 PAGE_SIZE, &recvlen, &requestid);
+
+		if (!recvlen)
+			break;
+
 		icmsghdrp = (struct icmsg_hdr *)&hbeat_txf_buf[
 				sizeof(struct vmbuspipe_hdr)];
 
@@ -340,12 +344,8 @@ static int util_probe(struct hv_device *dev,
 
 	set_channel_read_state(dev->channel, false);
 
-	ret = vmbus_open(dev->channel, 4 * PAGE_SIZE, 4 * PAGE_SIZE, NULL, 0,
-			srv->util_cb, dev->channel);
-	if (ret)
-		goto error;
-
 	hv_set_drvdata(dev, srv);
+
 	/*
 	 * Based on the host; initialize the framework and
 	 * service version numbers we will negotiate.
@@ -365,6 +365,11 @@ static int util_probe(struct hv_device *dev,
 		hb_srv_version = HB_VERSION;
 	}
 
+	ret = vmbus_open(dev->channel, 4 * PAGE_SIZE, 4 * PAGE_SIZE, NULL, 0,
+			srv->util_cb, dev->channel);
+	if (ret)
+		goto error;
+
 	return 0;
 
 error:
@@ -379,9 +384,9 @@ static int util_remove(struct hv_device *dev)
 {
 	struct hv_util_service *srv = hv_get_drvdata(dev);
 
-	vmbus_close(dev->channel);
 	if (srv->util_deinit)
 		srv->util_deinit();
+	vmbus_close(dev->channel);
 	kfree(srv->recv_buffer);
 
 	return 0;

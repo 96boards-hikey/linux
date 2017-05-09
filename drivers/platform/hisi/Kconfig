@@ -1,0 +1,12 @@
+config HISI_FIQ_DEBUGGER
+	bool "Enable the FIQ serial debugger on Hisi"
+	default n
+	select FIQ_DEBUGGER
+	help
+	  Enables the FIQ serial debugger on Hisi
+config HISI_HW_CFG_MGR
+	bool "Enable HW config manager on Hisi"
+	default n
+	depends on GPIOLIB
+	help
+	  Enables HW config manager on Hisi

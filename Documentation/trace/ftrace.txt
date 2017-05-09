@@ -108,8 +108,8 @@ of ftrace. Here is a list of some of the key files:
 	data is read from this file, it is consumed, and
 	will not be read again with a sequential read. The
 	"trace" file is static, and if the tracer is not
-	adding more data,they will display the same
-	information every time they are read.
+	adding more data, it will display the same
+	information every time it is read.
 
   trace_options:
 
@@ -203,6 +203,12 @@ of ftrace. Here is a list of some of the key files:
   set_ftrace_pid:
 
 	Have the function tracer only trace a single thread.
+
+  set_event_pid:
+
+	Have the events only trace a task with a PID listed in this file.
+	Note, sched_switch and sched_wake_up will also trace events
+	listed in this file.
 
   set_graph_function:
 
@@ -345,6 +351,31 @@ of ftrace. Here is a list of some of the key files:
 
 	  x86-tsc: Architectures may define their own clocks. For
 	  	   example, x86 uses its own TSC cycle clock here.
+
+	  ppc-tb: This uses the powerpc timebase register value.
+		  This is in sync across CPUs and can also be used
+		  to correlate events across hypervisor/guest if
+		  tb_offset is known.
+
+	  mono: This uses the fast monotonic clock (CLOCK_MONOTONIC)
+		which is monotonic and is subject to NTP rate adjustments.
+
+	  mono_raw:
+		This is the raw monotonic clock (CLOCK_MONOTONIC_RAW)
+		which is montonic but is not subject to any rate adjustments
+		and ticks at the same rate as the hardware clocksource.
+
+	  boot: This is the boot clock (CLOCK_BOOTTIME) and is based on the
+		fast monotonic clock, but also accounts for time spent in
+		suspend. Since the clock access is designed for use in
+		tracing in the suspend path, some side effects are possible
+		if clock is accessed after the suspend time is accounted before
+		the fast mono clock is updated. In this case, the clock update
+		appears to happen slightly sooner than it normally would have.
+		Also on 32-bit systems, its possible that the 64-bit boot offset
+		sees a partial update. These effects are rare and post
+		processing should be able to handle them. See comments on
+		ktime_get_boot_fast_ns function for more information.
 
 	To set a clock, simply echo the clock name into this file.
 
@@ -686,6 +717,8 @@ The above is mostly meaningful for kernel developers.
 	 The marks are determined by the difference between this
 	 current trace and the next trace.
 	  '$' - greater than 1 second
+	  '@' - greater than 100 milisecond
+	  '*' - greater than 10 milisecond
 	  '#' - greater than 1000 microsecond
 	  '!' - greater than 100 microsecond
 	  '+' - greater than 10 microsecond
@@ -1939,26 +1972,49 @@ want, depending on your needs.
 
   ie:
 
-  0)               |    up_write() {
-  0)   0.646 us    |      _spin_lock_irqsave();
-  0)   0.684 us    |      _spin_unlock_irqrestore();
-  0)   3.123 us    |    }
-  0)   0.548 us    |    fput();
-  0) + 58.628 us   |  }
+  3) # 1837.709 us |          } /* __switch_to */
+  3)               |          finish_task_switch() {
+  3)   0.313 us    |            _raw_spin_unlock_irq();
+  3)   3.177 us    |          }
+  3) # 1889.063 us |        } /* __schedule */
+  3) ! 140.417 us  |      } /* __schedule */
+  3) # 2034.948 us |    } /* schedule */
+  3) * 33998.59 us |  } /* schedule_preempt_disabled */
 
   [...]
 
-  0)               |      putname() {
-  0)               |        kmem_cache_free() {
-  0)   0.518 us    |          __phys_addr();
-  0)   1.757 us    |        }
-  0)   2.861 us    |      }
-  0) ! 115.305 us  |    }
-  0) ! 116.402 us  |  }
+  1)   0.260 us    |              msecs_to_jiffies();
+  1)   0.313 us    |              __rcu_read_unlock();
+  1) + 61.770 us   |            }
+  1) + 64.479 us   |          }
+  1)   0.313 us    |          rcu_bh_qs();
+  1)   0.313 us    |          __local_bh_enable();
+  1) ! 217.240 us  |        }
+  1)   0.365 us    |        idle_cpu();
+  1)               |        rcu_irq_exit() {
+  1)   0.417 us    |          rcu_eqs_enter_common.isra.47();
+  1)   3.125 us    |        }
+  1) ! 227.812 us  |      }
+  1) ! 457.395 us  |    }
+  1) @ 119760.2 us |  }
+
+  [...]
+
+  2)               |    handle_IPI() {
+  1)   6.979 us    |                  }
+  2)   0.417 us    |      scheduler_ipi();
+  1)   9.791 us    |                }
+  1) + 12.917 us   |              }
+  2)   3.490 us    |    }
+  1) + 15.729 us   |            }
+  1) + 18.542 us   |          }
+  2) $ 3594274 us  |  }
 
   + means that the function exceeded 10 usecs.
   ! means that the function exceeded 100 usecs.
   # means that the function exceeded 1000 usecs.
+  * means that the function exceeded 10 msecs.
+  @ means that the function exceeded 100 msecs.
   $ means that the function exceeded 1 sec.
 
 
@@ -2050,6 +2106,35 @@ will produce:
  1)               |             __might_sleep() {
  1)               |                /* I'm a comment! */
  1)   1.449 us    |             }
+
+
+You can disable the hierarchical function call formatting and instead print a
+flat list of function entry and return events.  This uses the format described
+in the Output Formatting section and respects all the trace options that
+control that formatting.  Hierarchical formatting is the default.
+
+	hierachical: echo nofuncgraph-flat > trace_options
+	flat: echo funcgraph-flat > trace_options
+
+  ie:
+
+  # tracer: function_graph
+  #
+  # entries-in-buffer/entries-written: 68355/68355   #P:2
+  #
+  #                              _-----=> irqs-off
+  #                             / _----=> need-resched
+  #                            | / _---=> hardirq/softirq
+  #                            || / _--=> preempt-depth
+  #                            ||| /     delay
+  #           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+  #              | |       |   ||||       |         |
+                sh-1806  [001] d...   198.843443: graph_ent: func=_raw_spin_lock
+                sh-1806  [001] d...   198.843445: graph_ent: func=__raw_spin_lock
+                sh-1806  [001] d..1   198.843447: graph_ret: func=__raw_spin_lock
+                sh-1806  [001] d..1   198.843449: graph_ret: func=_raw_spin_lock
+                sh-1806  [001] d..1   198.843451: graph_ent: func=_raw_spin_unlock_irqrestore
+                sh-1806  [001] d...   198.843453: graph_ret: func=_raw_spin_unlock_irqrestore
 
 
 You might find other useful features for this tracer in the
@@ -2406,6 +2491,23 @@ The following commands are supported:
   '!':
 
    echo '!writeback*:mod:ext3' >> set_ftrace_filter
+
+  Mod command supports module globbing. Disable tracing for all
+  functions except a specific module:
+
+   echo '!*:mod:!ext3' >> set_ftrace_filter
+
+  Disable tracing for all modules, but still trace kernel:
+
+   echo '!*:mod:*' >> set_ftrace_filter
+
+  Enable filter only for kernel:
+
+   echo '*write*:mod:!*' >> set_ftrace_filter
+
+  Enable filter for module globbing:
+
+   echo '*write*:mod:*snd*' >> set_ftrace_filter
 
 - traceon/traceoff
   These commands turn tracing on and off when the specified

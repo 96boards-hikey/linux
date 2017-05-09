@@ -577,8 +577,10 @@ static int ah6_input(struct xfrm_state *x, struct sk_buff *skb)
 
 	work_iph = ah_alloc_tmp(ahash, nfrags + sglists, hdr_len +
 				ahp->icv_trunc_len + seqhi_len);
-	if (!work_iph)
+	if (!work_iph) {
+		err = -ENOMEM;
 		goto out;
+	}
 
 	auth_data = ah_tmp_auth((u8 *)work_iph, hdr_len);
 	seqhi = (__be32 *)(auth_data + ahp->icv_trunc_len);
@@ -660,9 +662,10 @@ static int ah6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 		return 0;
 
 	if (type == NDISC_REDIRECT)
-		ip6_redirect(skb, net, skb->dev->ifindex, 0);
+		ip6_redirect(skb, net, skb->dev->ifindex, 0,
+			     sock_net_uid(net, NULL));
 	else
-		ip6_update_pmtu(skb, net, info, 0, 0);
+		ip6_update_pmtu(skb, net, info, 0, 0, sock_net_uid(net, NULL));
 	xfrm_state_put(x);
 
 	return 0;
@@ -681,7 +684,7 @@ static int ah6_init_state(struct xfrm_state *x)
 		goto error;
 
 	ahp = kzalloc(sizeof(*ahp), GFP_KERNEL);
-	if (ahp == NULL)
+	if (!ahp)
 		return -ENOMEM;
 
 	ahash = crypto_alloc_ahash(x->aalg->alg_name, 0, 0);

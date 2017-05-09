@@ -33,6 +33,7 @@ show up in /proc/sys/kernel:
 - domainname
 - hostname
 - hotplug
+- hardlockup_all_cpu_backtrace
 - hung_task_panic
 - hung_task_check_count
 - hung_task_timeout_secs
@@ -57,6 +58,8 @@ show up in /proc/sys/kernel:
 - panic_on_stackoverflow
 - panic_on_unrecovered_nmi
 - panic_on_warn
+- perf_cpu_time_max_percent
+- perf_event_paranoid
 - pid_max
 - powersave-nap               [ PPC only ]
 - printk
@@ -197,8 +200,8 @@ core_pattern is used to specify a core dumpfile pattern name.
 	%P	global pid (init PID namespace)
 	%i	tid
 	%I	global tid (init PID namespace)
-	%u	uid
-	%g	gid
+	%u	uid (in initial user namespace)
+	%g	gid (in initial user namespace)
 	%d	dump mode, matches PR_SET_DUMPABLE and
 		/proc/sys/fs/suid_dumpable
 	%s	signal number
@@ -292,6 +295,17 @@ Information Service) or YP (Yellow Pages) domainname. These two
 domain names are in general different. For a detailed discussion
 see the hostname(1) man page.
 
+==============================================================
+hardlockup_all_cpu_backtrace:
+
+This value controls the hard lockup detector behavior when a hard
+lockup condition is detected as to whether or not to gather further
+debug information. If enabled, arch-specific all-CPU stack dumping
+will be initiated.
+
+0: do nothing. This is the default behavior.
+
+1: on detection capture more debug information.
 ==============================================================
 
 hotplug:
@@ -612,6 +626,19 @@ allowed to execute.
 
 ==============================================================
 
+perf_event_paranoid:
+
+Controls use of the performance events system by unprivileged
+users (without CAP_SYS_ADMIN).  The default value is 3 if
+CONFIG_SECURITY_PERF_EVENTS_RESTRICT is set, or 1 otherwise.
+
+ -1: Allow use of (almost) all events by all users
+>=0: Disallow raw tracepoint access by users without CAP_IOC_LOCK
+>=1: Disallow CPU event access by users without CAP_SYS_ADMIN
+>=2: Disallow kernel profiling by users without CAP_SYS_ADMIN
+>=3: Disallow all event access by users without CAP_SYS_ADMIN
+
+==============================================================
 
 pid_max:
 
@@ -872,6 +899,27 @@ can be ORed together:
 
 ==============================================================
 
+threads-max
+
+This value controls the maximum number of threads that can be created
+using fork().
+
+During initialization the kernel sets this value such that even if the
+maximum number of threads is created, the thread structures occupy only
+a part (1/8th) of the available RAM pages.
+
+The minimum value that can be written to threads-max is 20.
+The maximum value that can be written to threads-max is given by the
+constant FUTEX_TID_MASK (0x3fffffff).
+If a value outside of this range is written to threads-max an error
+EINVAL occurs.
+
+The value written is checked against the available RAM pages. If the
+thread structures would occupy too much (more than 1/8th) of the
+available RAM pages threads-max is reduced accordingly.
+
+==============================================================
+
 unknown_nmi_panic:
 
 The value in this file affects behavior of handling NMI. When the
@@ -899,6 +947,27 @@ If the watchdog parameter is read, for example by executing
 
 the output of this command (0 or 1) shows the logical OR of soft_watchdog
 and nmi_watchdog.
+
+==============================================================
+
+watchdog_cpumask:
+
+This value can be used to control on which cpus the watchdog may run.
+The default cpumask is all possible cores, but if NO_HZ_FULL is
+enabled in the kernel config, and cores are specified with the
+nohz_full= boot argument, those cores are excluded by default.
+Offline cores can be included in this mask, and if the core is later
+brought online, the watchdog will be started based on the mask value.
+
+Typically this value would only be touched in the nohz_full case
+to re-enable cores that by default were not running the watchdog,
+if a kernel lockup was suspected on those cores.
+
+The argument value is the standard cpulist format for cpumasks,
+so for example to enable the watchdog on cores 0, 2, 3, and 4 you
+might say:
+
+  echo 0,2-4 > /proc/sys/kernel/watchdog_cpumask
 
 ==============================================================
 

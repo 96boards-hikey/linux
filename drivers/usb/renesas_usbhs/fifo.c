@@ -190,7 +190,8 @@ static int usbhsf_pkt_handler(struct usbhs_pipe *pipe, int type)
 		goto __usbhs_pkt_handler_end;
 	}
 
-	ret = func(pkt, &is_done);
+	if (likely(func))
+		ret = func(pkt, &is_done);
 
 	if (is_done)
 		__usbhsf_pkt_del(pkt);
@@ -611,6 +612,8 @@ struct usbhs_pkt_handle usbhs_fifo_pio_push_handler = {
 static int usbhsf_prepare_pop(struct usbhs_pkt *pkt, int *is_done)
 {
 	struct usbhs_pipe *pipe = pkt->pipe;
+	struct usbhs_priv *priv = usbhs_pipe_to_priv(pipe);
+	struct usbhs_fifo *fifo = usbhsf_get_cfifo(priv);
 
 	if (usbhs_pipe_is_busy(pipe))
 		return 0;
@@ -623,6 +626,9 @@ static int usbhsf_prepare_pop(struct usbhs_pkt *pkt, int *is_done)
 	 */
 	usbhs_pipe_data_sequence(pipe, pkt->sequence);
 	pkt->sequence = -1; /* -1 sequence will be ignored */
+
+	if (usbhs_pipe_is_dcp(pipe))
+		usbhsf_fifo_clear(pipe, fifo);
 
 	usbhs_pipe_set_trans_count_if_bulk(pipe, pkt->length);
 	usbhs_pipe_enable(pipe);
@@ -673,7 +679,14 @@ static int usbhsf_pio_try_pop(struct usbhs_pkt *pkt, int *is_done)
 		*is_done = 1;
 		usbhsf_rx_irq_ctrl(pipe, 0);
 		usbhs_pipe_running(pipe, 0);
-		usbhs_pipe_disable(pipe);	/* disable pipe first */
+		/*
+		 * If function mode, since this controller is possible to enter
+		 * Control Write status stage at this timing, this driver
+		 * should not disable the pipe. If such a case happens, this
+		 * controller is not able to complete the status stage.
+		 */
+		if (!usbhs_mod_is_host(priv) && !usbhs_pipe_is_dcp(pipe))
+			usbhs_pipe_disable(pipe);	/* disable pipe first */
 	}
 
 	/*
@@ -795,20 +808,27 @@ static void xfer_work(struct work_struct *work)
 {
 	struct usbhs_pkt *pkt = container_of(work, struct usbhs_pkt, work);
 	struct usbhs_pipe *pipe = pkt->pipe;
-	struct usbhs_fifo *fifo = usbhs_pipe_to_fifo(pipe);
+	struct usbhs_fifo *fifo;
 	struct usbhs_priv *priv = usbhs_pipe_to_priv(pipe);
 	struct dma_async_tx_descriptor *desc;
-	struct dma_chan *chan = usbhsf_dma_chan_get(fifo, pkt);
+	struct dma_chan *chan;
 	struct device *dev = usbhs_priv_to_dev(priv);
 	enum dma_transfer_direction dir;
+	unsigned long flags;
 
+	usbhs_lock(priv, flags);
+	fifo = usbhs_pipe_to_fifo(pipe);
+	if (!fifo)
+		goto xfer_work_end;
+
+	chan = usbhsf_dma_chan_get(fifo, pkt);
 	dir = usbhs_pipe_is_dir_in(pipe) ? DMA_DEV_TO_MEM : DMA_MEM_TO_DEV;
 
 	desc = dmaengine_prep_slave_single(chan, pkt->dma + pkt->actual,
 					pkt->trans, dir,
 					DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 	if (!desc)
-		return;
+		goto xfer_work_end;
 
 	desc->callback		= usbhsf_dma_complete;
 	desc->callback_param	= pipe;
@@ -816,7 +836,7 @@ static void xfer_work(struct work_struct *work)
 	pkt->cookie = dmaengine_submit(desc);
 	if (pkt->cookie < 0) {
 		dev_err(dev, "Failed to submit dma descriptor\n");
-		return;
+		goto xfer_work_end;
 	}
 
 	dev_dbg(dev, "  %s %d (%d/ %d)\n",
@@ -827,6 +847,9 @@ static void xfer_work(struct work_struct *work)
 	usbhs_pipe_set_trans_count_if_bulk(pipe, pkt->trans);
 	dma_async_issue_pending(chan);
 	usbhs_pipe_enable(pipe);
+
+xfer_work_end:
+	usbhs_unlock(priv, flags);
 }
 
 /*
@@ -846,7 +869,7 @@ static int usbhsf_dma_prepare_push(struct usbhs_pkt *pkt, int *is_done)
 
 	/* use PIO if packet is less than pio_dma_border or pipe is DCP */
 	if ((len < usbhs_get_dparam(priv, pio_dma_border)) ||
-	    usbhs_pipe_is_dcp(pipe))
+	    usbhs_pipe_type_is(pipe, USB_ENDPOINT_XFER_ISOC))
 		goto usbhsf_pio_prepare_push;
 
 	/* check data length if this driver don't use USB-DMAC */
@@ -877,6 +900,7 @@ static int usbhsf_dma_prepare_push(struct usbhs_pkt *pkt, int *is_done)
 
 	pkt->trans = len;
 
+	usbhsf_tx_irq_ctrl(pipe, 0);
 	INIT_WORK(&pkt->work, xfer_work);
 	schedule_work(&pkt->work);
 
@@ -950,7 +974,7 @@ static int usbhsf_dma_prepare_pop_with_usb_dmac(struct usbhs_pkt *pkt,
 
 	/* use PIO if packet is less than pio_dma_border or pipe is DCP */
 	if ((pkt->length < usbhs_get_dparam(priv, pio_dma_border)) ||
-	    usbhs_pipe_is_dcp(pipe))
+	    usbhs_pipe_type_is(pipe, USB_ENDPOINT_XFER_ISOC))
 		goto usbhsf_pio_prepare_pop;
 
 	fifo = usbhsf_get_dma_fifo(priv, pkt);
@@ -1227,15 +1251,21 @@ static void usbhsf_dma_init_dt(struct device *dev, struct usbhs_fifo *fifo,
 {
 	char name[16];
 
-	snprintf(name, sizeof(name), "tx%d", channel);
-	fifo->tx_chan = dma_request_slave_channel_reason(dev, name);
-	if (IS_ERR(fifo->tx_chan))
-		fifo->tx_chan = NULL;
-
-	snprintf(name, sizeof(name), "rx%d", channel);
-	fifo->rx_chan = dma_request_slave_channel_reason(dev, name);
-	if (IS_ERR(fifo->rx_chan))
-		fifo->rx_chan = NULL;
+	/*
+	 * To avoid complex handing for DnFIFOs, the driver uses each
+	 * DnFIFO as TX or RX direction (not bi-direction).
+	 * So, the driver uses odd channels for TX, even channels for RX.
+	 */
+	snprintf(name, sizeof(name), "ch%d", channel);
+	if (channel & 1) {
+		fifo->tx_chan = dma_request_slave_channel_reason(dev, name);
+		if (IS_ERR(fifo->tx_chan))
+			fifo->tx_chan = NULL;
+	} else {
+		fifo->rx_chan = dma_request_slave_channel_reason(dev, name);
+		if (IS_ERR(fifo->rx_chan))
+			fifo->rx_chan = NULL;
+	}
 }
 
 static void usbhsf_dma_init(struct usbhs_priv *priv, struct usbhs_fifo *fifo,

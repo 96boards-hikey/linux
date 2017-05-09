@@ -1,0 +1,1 @@
+obj-$(CONFIG_HISI_FB_KIRIN960) += dss/

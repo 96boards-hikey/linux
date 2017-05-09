@@ -26,7 +26,9 @@
 #include <linux/sched.h>
 #include <linux/dma-mapping.h>
 #include <linux/uaccess.h>
+#include <linux/slab.h>
 #include <linux/goldfish.h>
+#include <linux/acpi.h>
 
 MODULE_AUTHOR("Google, Inc.");
 MODULE_DESCRIPTION("Android QEMU Audio Driver");
@@ -63,7 +65,7 @@ struct goldfish_audio {
 #define AUDIO_READ(data, addr)		(readl(data->reg_base + addr))
 #define AUDIO_WRITE(data, addr, x)	(writel(x, data->reg_base + addr))
 #define AUDIO_WRITE64(data, addr, addr2, x)	\
-	(gf_write64((u64)(x), data->reg_base + addr, data->reg_base+addr2))
+	(gf_write_dma_addr((x), data->reg_base + addr, data->reg_base+addr2))
 
 /*
  *  temporary variable used between goldfish_audio_probe() and
@@ -115,6 +117,7 @@ static ssize_t goldfish_audio_read(struct file *fp, char __user *buf,
 				   size_t count, loff_t *pos)
 {
 	struct goldfish_audio *data = fp->private_data;
+	unsigned long irq_flags;
 	int length;
 	int result = 0;
 
@@ -127,6 +130,10 @@ static ssize_t goldfish_audio_read(struct file *fp, char __user *buf,
 
 		wait_event_interruptible(data->wait, data->buffer_status &
 					 AUDIO_INT_READ_BUFFER_FULL);
+
+		spin_lock_irqsave(&data->lock, irq_flags);
+		data->buffer_status &= ~AUDIO_INT_READ_BUFFER_FULL;
+		spin_unlock_irqrestore(&data->lock, irq_flags);
 
 		length = AUDIO_READ(data, AUDIO_READ_BUFFER_AVAILABLE);
 
@@ -344,11 +351,25 @@ static int goldfish_audio_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct of_device_id goldfish_audio_of_match[] = {
+	{ .compatible = "google,goldfish-audio", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, goldfish_audio_of_match);
+
+static const struct acpi_device_id goldfish_audio_acpi_match[] = {
+	{ "GFSH0005", 0 },
+	{ },
+};
+MODULE_DEVICE_TABLE(acpi, goldfish_audio_acpi_match);
+
 static struct platform_driver goldfish_audio_driver = {
 	.probe		= goldfish_audio_probe,
 	.remove		= goldfish_audio_remove,
 	.driver = {
-		.name = "goldfish_audio"
+		.name = "goldfish_audio",
+		.of_match_table = goldfish_audio_of_match,
+		.acpi_match_table = ACPI_PTR(goldfish_audio_acpi_match),
 	}
 };
 

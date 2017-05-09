@@ -358,6 +358,7 @@ enum fuse_opcode {
 	FUSE_FALLOCATE     = 43,
 	FUSE_READDIRPLUS   = 44,
 	FUSE_RENAME2       = 45,
+	FUSE_CANONICAL_PATH= 2016,
 
 	/* CUSE specific operations */
 	CUSE_INIT          = 4096,
@@ -754,5 +755,8 @@ struct fuse_notify_retrieve_in {
 	uint64_t	dummy3;
 	uint64_t	dummy4;
 };
+
+/* Device ioctls: */
+#define FUSE_DEV_IOC_CLONE	_IOR(229, 0, uint32_t)
 
 #endif /* _LINUX_FUSE_H */

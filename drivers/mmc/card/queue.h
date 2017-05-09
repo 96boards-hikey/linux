@@ -12,6 +12,7 @@ struct mmc_blk_request {
 	struct mmc_command	cmd;
 	struct mmc_command	stop;
 	struct mmc_data		data;
+	int			retune_retry_done;
 };
 
 enum mmc_packed_type {
@@ -24,7 +25,7 @@ enum mmc_packed_type {
 
 struct mmc_packed {
 	struct list_head	list;
-	u32			cmd_hdr[1024];
+	__le32			cmd_hdr[1024];
 	unsigned int		blocks;
 	u8			nr_entries;
 	u8			retries;
@@ -57,6 +58,14 @@ struct mmc_queue {
 	struct mmc_queue_req	mqrq[2];
 	struct mmc_queue_req	*mqrq_cur;
 	struct mmc_queue_req	*mqrq_prev;
+#ifdef CONFIG_MMC_SIMULATE_MAX_SPEED
+	atomic_t max_write_speed;
+	atomic_t max_read_speed;
+	atomic_t cache_size;
+	/* i/o tracking */
+	atomic_long_t cache_used;
+	unsigned long cache_jiffies;
+#endif
 };
 
 extern int mmc_init_queue(struct mmc_queue *, struct mmc_card *, spinlock_t *,
@@ -72,5 +81,7 @@ extern void mmc_queue_bounce_post(struct mmc_queue_req *);
 
 extern int mmc_packed_init(struct mmc_queue *, struct mmc_card *);
 extern void mmc_packed_clean(struct mmc_queue *);
+
+extern int mmc_access_rpmb(struct mmc_queue *);
 
 #endif

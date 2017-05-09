@@ -816,21 +816,16 @@ static void sethue(struct gspca_dev *gspca_dev, s32 val)
 		s16 huesin;
 		s16 huecos;
 
-		/* fixp_sin and fixp_cos accept only positive values, while
-		 * our val is between -90 and 90
-		 */
-		val += 360;
-
 		/* According to the datasheet the registers expect HUESIN and
 		 * HUECOS to be the result of the trigonometric functions,
 		 * scaled by 0x80.
 		 *
-		 * The 0x100 here represents the maximun absolute value
+		 * The 0x7fff here represents the maximum absolute value
 		 * returned byt fixp_sin and fixp_cos, so the scaling will
 		 * consider the result like in the interval [-1.0, 1.0].
 		 */
-		huesin = fixp_sin(val) * 0x80 / 0x100;
-		huecos = fixp_cos(val) * 0x80 / 0x100;
+		huesin = fixp_sin16(val) * 0x80 / 0x7fff;
+		huecos = fixp_cos16(val) * 0x80 / 0x7fff;
 
 		if (huesin < 0) {
 			sccb_reg_write(gspca_dev, 0xab,
@@ -1496,8 +1491,13 @@ static void sd_set_streamparm(struct gspca_dev *gspca_dev,
 	struct v4l2_fract *tpf = &cp->timeperframe;
 	struct sd *sd = (struct sd *) gspca_dev;
 
-	/* Set requested framerate */
-	sd->frame_rate = tpf->denominator / tpf->numerator;
+	if (tpf->numerator == 0 || tpf->denominator == 0)
+		/* Set default framerate */
+		sd->frame_rate = 30;
+	else
+		/* Set requested framerate */
+		sd->frame_rate = tpf->denominator / tpf->numerator;
+
 	if (gspca_dev->streaming)
 		set_frame_rate(gspca_dev);
 

@@ -36,6 +36,7 @@
 #include "sentelic.h"
 #include "cypress_ps2.h"
 #include "focaltech.h"
+#include "vmmouse.h"
 
 #define DRIVER_DESC	"PS/2 mouse driver"
 
@@ -46,7 +47,7 @@ MODULE_LICENSE("GPL");
 static unsigned int psmouse_max_proto = PSMOUSE_AUTO;
 static int psmouse_set_maxproto(const char *val, const struct kernel_param *);
 static int psmouse_get_maxproto(char *buffer, const struct kernel_param *kp);
-static struct kernel_param_ops param_ops_proto_abbrev = {
+static const struct kernel_param_ops param_ops_proto_abbrev = {
 	.set = psmouse_set_maxproto,
 	.get = psmouse_get_maxproto,
 };
@@ -62,7 +63,7 @@ static unsigned int psmouse_rate = 100;
 module_param_named(rate, psmouse_rate, uint, 0644);
 MODULE_PARM_DESC(rate, "Report rate, in reports per second.");
 
-static bool psmouse_smartscroll = 1;
+static bool psmouse_smartscroll = true;
 module_param_named(smartscroll, psmouse_smartscroll, bool, 0644);
 MODULE_PARM_DESC(smartscroll, "Logitech Smartscroll autorepeat, 1 = enabled (default), 0 = disabled.");
 
@@ -790,6 +791,13 @@ static int psmouse_extensions(struct psmouse *psmouse,
 		}
 	}
 
+	if (psmouse_do_detect(vmmouse_detect, psmouse, set_properties) == 0) {
+		if (max_proto > PSMOUSE_IMEX) {
+			if (!set_properties || vmmouse_init(psmouse) == 0)
+				return PSMOUSE_VMMOUSE;
+		}
+	}
+
 /*
  * Try Kensington ThinkingMouse (we try first, because synaptics probe
  * upsets the thinkingmouse).
@@ -1111,6 +1119,15 @@ static const struct psmouse_protocol psmouse_protocols[] = {
 		.alias		= "focaltech",
 		.detect		= focaltech_detect,
 		.init		= focaltech_init,
+	},
+#endif
+#ifdef CONFIG_MOUSE_PS2_VMMOUSE
+	{
+		.type		= PSMOUSE_VMMOUSE,
+		.name		= VMMOUSE_PSNAME,
+		.alias		= "vmmouse",
+		.detect		= vmmouse_detect,
+		.init		= vmmouse_init,
 	},
 #endif
 	{
@@ -1522,6 +1539,10 @@ static int psmouse_connect(struct serio *serio, struct serio_driver *drv)
 	error = serio_open(serio, drv);
 	if (error)
 		goto err_clear_drvdata;
+
+	/* give PT device some time to settle down before probing */
+	if (serio->id.type == SERIO_PS_PSTHRU)
+		usleep_range(10000, 15000);
 
 	if (psmouse_probe(psmouse) < 0) {
 		error = -ENODEV;

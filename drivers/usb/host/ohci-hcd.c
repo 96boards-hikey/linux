@@ -72,7 +72,7 @@
 static const char	hcd_name [] = "ohci_hcd";
 
 #define	STATECHANGE_DELAY	msecs_to_jiffies(300)
-#define	IO_WATCHDOG_DELAY	msecs_to_jiffies(250)
+#define	IO_WATCHDOG_DELAY	msecs_to_jiffies(275)
 
 #include "ohci.h"
 #include "pci-quirks.h"
@@ -155,7 +155,8 @@ static int ohci_urb_enqueue (
 	int		retval = 0;
 
 	/* every endpoint has a ed, locate and maybe (re)initialize it */
-	if (! (ed = ed_get (ohci, urb->ep, urb->dev, pipe, urb->interval)))
+	ed = ed_get(ohci, urb->ep, urb->dev, pipe, urb->interval);
+	if (! ed)
 		return -ENOMEM;
 
 	/* for the private part of the URB we need the number of TDs (size) */

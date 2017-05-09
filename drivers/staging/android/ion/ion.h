@@ -28,10 +28,12 @@ struct ion_mapper;
 struct ion_client;
 struct ion_buffer;
 
-/* This should be removed some day when phys_addr_t's are fully
-   plumbed in the kernel, and all instances of ion_phys_addr_t should
-   be converted to phys_addr_t.  For the time being many kernel interfaces
-   do not accept phys_addr_t's that would have to */
+/*
+ * This should be removed some day when phys_addr_t's are fully
+ * plumbed in the kernel, and all instances of ion_phys_addr_t should
+ * be converted to phys_addr_t.  For the time being many kernel interfaces
+ * do not accept phys_addr_t's that would have to
+ */
 #define ion_phys_addr_t unsigned long
 
 /**
@@ -188,6 +190,31 @@ struct dma_buf *ion_share_dma_buf(struct ion_client *client,
  * @handle:	the handle
  */
 int ion_share_dma_buf_fd(struct ion_client *client, struct ion_handle *handle);
+
+/**
+ * ion_map_iommu() - create iommu mapping for the given handle
+ * @client:	the client
+ * @handle:	the handle
+ * @format:	the format of iommu mapping
+ */
+int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
+		struct iommu_map_format *format);
+
+/**
+ * ion_unmap_iommu() - destroy a iommu mapping for a handle
+ * @client:	the client
+ * @handle:	the handle
+ */
+void ion_unmap_iommu(struct ion_client *client, struct ion_handle *handle);
+
+/**
+ * ion_change_flags() - change buffer flags
+ * @client:	the client
+ * @handle:	the handle
+ * @flags: flags
+ */
+int ion_change_flags(struct ion_client *client,
+		struct ion_handle *handle, int flags);
 
 /**
  * ion_import_dma_buf() - given an dma-buf fd from the ion exporter get handle

@@ -62,6 +62,7 @@
 #include <asm/os_info.h>
 #include <asm/sclp.h>
 #include <asm/sysinfo.h>
+#include <asm/numa.h>
 #include "entry.h"
 
 /*
@@ -76,7 +77,7 @@ EXPORT_SYMBOL(console_devno);
 unsigned int console_irq = -1;
 EXPORT_SYMBOL(console_irq);
 
-unsigned long elf_hwcap = 0;
+unsigned long elf_hwcap __read_mostly = 0;
 char elf_platform[ELF_PLATFORM_SIZE];
 
 int __initdata memory_end_set;
@@ -128,9 +129,9 @@ __setup("condev=", condev_setup);
 static void __init set_preferred_console(void)
 {
 	if (MACHINE_IS_KVM) {
-		if (sclp_has_vt220())
+		if (sclp.has_vt220)
 			add_preferred_console("ttyS", 1, NULL);
-		else if (sclp_has_linemode())
+		else if (sclp.has_linemode)
 			add_preferred_console("ttyS", 0, NULL);
 		else
 			add_preferred_console("hvc", 0, NULL);
@@ -328,6 +329,7 @@ static void __init setup_lowcore(void)
 		+ PAGE_SIZE - STACK_FRAME_OVERHEAD - sizeof(struct pt_regs);
 	lc->current_task = (unsigned long) init_thread_union.thread_info.task;
 	lc->thread_info = (unsigned long) &init_thread_union;
+	lc->lpp = LPP_MAGIC;
 	lc->machine_flags = S390_lowcore.machine_flags;
 	lc->stfl_fac_list = S390_lowcore.stfl_fac_list;
 	memcpy(lc->stfle_fac_list, S390_lowcore.stfle_fac_list,
@@ -510,8 +512,8 @@ static void reserve_memory_end(void)
 {
 #ifdef CONFIG_CRASH_DUMP
 	if (ipl_info.type == IPL_TYPE_FCP_DUMP &&
-	    !OLDMEM_BASE && sclp_get_hsa_size()) {
-		memory_end = sclp_get_hsa_size();
+	    !OLDMEM_BASE && sclp.hsa_size) {
+		memory_end = sclp.hsa_size;
 		memory_end &= PAGE_MASK;
 		memory_end_set = 1;
 	}
@@ -576,7 +578,7 @@ static void __init reserve_crashkernel(void)
 		crash_base = low;
 	} else {
 		/* Find suitable area in free memory */
-		low = max_t(unsigned long, crash_size, sclp_get_hsa_size());
+		low = max_t(unsigned long, crash_size, sclp.hsa_size);
 		high = crash_base ? crash_base + crash_size : ULONG_MAX;
 
 		if (crash_base && crash_base < low) {
@@ -640,19 +642,24 @@ static void __init check_initrd(void)
 }
 
 /*
- * Reserve all kernel text
+ * Reserve memory used for lowcore/command line/kernel image.
  */
 static void __init reserve_kernel(void)
 {
-	unsigned long start_pfn;
-	start_pfn = PFN_UP(__pa(&_end));
+	unsigned long start_pfn = PFN_UP(__pa(&_end));
 
+#ifdef CONFIG_DMA_API_DEBUG
 	/*
-	 * Reserve memory used for lowcore/command line/kernel image.
+	 * DMA_API_DEBUG code stumbles over addresses from the
+	 * range [_ehead, _stext]. Mark the memory as reserved
+	 * so it is not used for CONFIG_DMA_API_DEBUG=y.
 	 */
+	memblock_reserve(0, PFN_PHYS(start_pfn));
+#else
 	memblock_reserve(0, (unsigned long)_ehead);
 	memblock_reserve((unsigned long)_stext, PFN_PHYS(start_pfn)
 			 - (unsigned long)_stext);
+#endif
 }
 
 static void __init reserve_elfcorehdr(void)
@@ -683,7 +690,7 @@ static void __init setup_memory(void)
 /*
  * Setup hardware capabilities.
  */
-static void __init setup_hwcaps(void)
+static int __init setup_hwcaps(void)
 {
 	static const int stfl_bits[6] = { 0, 2, 7, 17, 19, 21 };
 	struct cpuid cpu_id;
@@ -749,16 +756,15 @@ static void __init setup_hwcaps(void)
 		elf_hwcap |= HWCAP_S390_TE;
 
 	/*
-	 * Vector extension HWCAP_S390_VXRS is bit 11.
+	 * Vector extension HWCAP_S390_VXRS is bit 11. The Vector extension
+	 * can be disabled with the "novx" parameter. Use MACHINE_HAS_VX
+	 * instead of facility bit 129.
 	 */
-	if (test_facility(129))
+	if (MACHINE_HAS_VX)
 		elf_hwcap |= HWCAP_S390_VXRS;
 	get_cpu_id(&cpu_id);
 	add_device_randomness(&cpu_id, sizeof(cpu_id));
 	switch (cpu_id.machine) {
-	case 0x9672:
-		strcpy(elf_platform, "g5");
-		break;
 	case 0x2064:
 	case 0x2066:
 	default:	/* Use "z900" as default for 64 bit kernels. */
@@ -788,7 +794,9 @@ static void __init setup_hwcaps(void)
 		strcpy(elf_platform, "z13");
 		break;
 	}
+	return 0;
 }
+arch_initcall(setup_hwcaps);
 
 /*
  * Add system information as device randomness
@@ -797,10 +805,10 @@ static void __init setup_randomness(void)
 {
 	struct sysinfo_3_2_2 *vmms;
 
-	vmms = (struct sysinfo_3_2_2 *) alloc_page(GFP_KERNEL);
-	if (vmms && stsi(vmms, 3, 2, 2) == 0 && vmms->count)
-		add_device_randomness(&vmms, vmms->count);
-	free_page((unsigned long) vmms);
+	vmms = (struct sysinfo_3_2_2 *) memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+	if (stsi(vmms, 3, 2, 2) == 0 && vmms->count)
+		add_device_randomness(&vmms->vm, sizeof(vmms->vm[0]) * vmms->count);
+	memblock_free((unsigned long) vmms, PAGE_SIZE);
 }
 
 /*
@@ -863,17 +871,18 @@ void __init setup_arch(char **cmdline_p)
 
 	check_initrd();
 	reserve_crashkernel();
+	/*
+	 * Be aware that smp_save_dump_cpus() triggers a system reset.
+	 * Therefore CPU and device initialization should be done afterwards.
+	 */
+	smp_save_dump_cpus();
 
 	setup_resources();
 	setup_vmcoreinfo();
 	setup_lowcore();
 	smp_fill_possible_mask();
         cpu_init();
-
-	/*
-	 * Setup capabilities (ELF_HWCAP & ELF_PLATFORM).
-	 */
-	setup_hwcaps();
+	numa_setup();
 
 	/*
 	 * Create kernel page tables and switch to virtual addressing.

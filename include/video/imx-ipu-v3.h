@@ -16,6 +16,7 @@
 #include <linux/videodev2.h>
 #include <linux/bitmap.h>
 #include <linux/fb.h>
+#include <linux/of.h>
 #include <media/v4l2-mediabus.h>
 #include <video/videomode.h>
 
@@ -39,7 +40,7 @@ struct ipu_di_signal_cfg {
 
 	struct videomode mode;
 
-	u32 pixel_fmt;
+	u32 bus_format;
 	u32 v_to_h_sync;
 
 #define IPU_DI_CLKMODE_SYNC	(1 << 0)
@@ -343,8 +344,8 @@ struct ipu_client_platformdata {
 	int di;
 	int dc;
 	int dp;
-	int dmfc;
 	int dma[2];
+	struct device_node *of_node;
 };
 
 #endif /* __DRM_IPU_H__ */

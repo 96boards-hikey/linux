@@ -18,7 +18,7 @@
 */
 #include <linux/export.h>
 #include <linux/moduleloader.h>
-#include <linux/ftrace_event.h>
+#include <linux/trace_events.h>
 #include <linux/init.h>
 #include <linux/kallsyms.h>
 #include <linux/file.h>
@@ -101,48 +101,201 @@
 DEFINE_MUTEX(module_mutex);
 EXPORT_SYMBOL_GPL(module_mutex);
 static LIST_HEAD(modules);
+
+#ifdef CONFIG_MODULES_TREE_LOOKUP
+
+/*
+ * Use a latched RB-tree for __module_address(); this allows us to use
+ * RCU-sched lookups of the address from any context.
+ *
+ * Because modules have two address ranges: init and core, we need two
+ * latch_tree_nodes entries. Therefore we need the back-pointer from
+ * mod_tree_node.
+ *
+ * Because init ranges are short lived we mark them unlikely and have placed
+ * them outside the critical cacheline in struct module.
+ *
+ * This is conditional on PERF_EVENTS || TRACING because those can really hit
+ * __module_address() hard by doing a lot of stack unwinding; potentially from
+ * NMI context.
+ */
+
+static __always_inline unsigned long __mod_tree_val(struct latch_tree_node *n)
+{
+	struct mod_tree_node *mtn = container_of(n, struct mod_tree_node, node);
+	struct module *mod = mtn->mod;
+
+	if (unlikely(mtn == &mod->mtn_init))
+		return (unsigned long)mod->module_init;
+
+	return (unsigned long)mod->module_core;
+}
+
+static __always_inline unsigned long __mod_tree_size(struct latch_tree_node *n)
+{
+	struct mod_tree_node *mtn = container_of(n, struct mod_tree_node, node);
+	struct module *mod = mtn->mod;
+
+	if (unlikely(mtn == &mod->mtn_init))
+		return (unsigned long)mod->init_size;
+
+	return (unsigned long)mod->core_size;
+}
+
+static __always_inline bool
+mod_tree_less(struct latch_tree_node *a, struct latch_tree_node *b)
+{
+	return __mod_tree_val(a) < __mod_tree_val(b);
+}
+
+static __always_inline int
+mod_tree_comp(void *key, struct latch_tree_node *n)
+{
+	unsigned long val = (unsigned long)key;
+	unsigned long start, end;
+
+	start = __mod_tree_val(n);
+	if (val < start)
+		return -1;
+
+	end = start + __mod_tree_size(n);
+	if (val >= end)
+		return 1;
+
+	return 0;
+}
+
+static const struct latch_tree_ops mod_tree_ops = {
+	.less = mod_tree_less,
+	.comp = mod_tree_comp,
+};
+
+static struct mod_tree_root {
+	struct latch_tree_root root;
+	unsigned long addr_min;
+	unsigned long addr_max;
+} mod_tree __cacheline_aligned = {
+	.addr_min = -1UL,
+};
+
+#define module_addr_min mod_tree.addr_min
+#define module_addr_max mod_tree.addr_max
+
+static noinline void __mod_tree_insert(struct mod_tree_node *node)
+{
+	latch_tree_insert(&node->node, &mod_tree.root, &mod_tree_ops);
+}
+
+static void __mod_tree_remove(struct mod_tree_node *node)
+{
+	latch_tree_erase(&node->node, &mod_tree.root, &mod_tree_ops);
+}
+
+/*
+ * These modifications: insert, remove_init and remove; are serialized by the
+ * module_mutex.
+ */
+static void mod_tree_insert(struct module *mod)
+{
+	mod->mtn_core.mod = mod;
+	mod->mtn_init.mod = mod;
+
+	__mod_tree_insert(&mod->mtn_core);
+	if (mod->init_size)
+		__mod_tree_insert(&mod->mtn_init);
+}
+
+static void mod_tree_remove_init(struct module *mod)
+{
+	if (mod->init_size)
+		__mod_tree_remove(&mod->mtn_init);
+}
+
+static void mod_tree_remove(struct module *mod)
+{
+	__mod_tree_remove(&mod->mtn_core);
+	mod_tree_remove_init(mod);
+}
+
+static struct module *mod_find(unsigned long addr)
+{
+	struct latch_tree_node *ltn;
+
+	ltn = latch_tree_find((void *)addr, &mod_tree.root, &mod_tree_ops);
+	if (!ltn)
+		return NULL;
+
+	return container_of(ltn, struct mod_tree_node, node)->mod;
+}
+
+#else /* MODULES_TREE_LOOKUP */
+
+static unsigned long module_addr_min = -1UL, module_addr_max = 0;
+
+static void mod_tree_insert(struct module *mod) { }
+static void mod_tree_remove_init(struct module *mod) { }
+static void mod_tree_remove(struct module *mod) { }
+
+static struct module *mod_find(unsigned long addr)
+{
+	struct module *mod;
+
+	list_for_each_entry_rcu(mod, &modules, list) {
+		if (within_module(addr, mod))
+			return mod;
+	}
+
+	return NULL;
+}
+
+#endif /* MODULES_TREE_LOOKUP */
+
+/*
+ * Bounds of module text, for speeding up __module_address.
+ * Protected by module_mutex.
+ */
+static void __mod_update_bounds(void *base, unsigned int size)
+{
+	unsigned long min = (unsigned long)base;
+	unsigned long max = min + size;
+
+	if (min < module_addr_min)
+		module_addr_min = min;
+	if (max > module_addr_max)
+		module_addr_max = max;
+}
+
+static void mod_update_bounds(struct module *mod)
+{
+	__mod_update_bounds(mod->module_core, mod->core_size);
+	if (mod->init_size)
+		__mod_update_bounds(mod->module_init, mod->init_size);
+}
+
 #ifdef CONFIG_KGDB_KDB
 struct list_head *kdb_modules = &modules; /* kdb needs the list of modules */
 #endif /* CONFIG_KGDB_KDB */
 
-#ifdef CONFIG_MODULE_SIG
-#ifdef CONFIG_MODULE_SIG_FORCE
-static bool sig_enforce = true;
-#else
-static bool sig_enforce = false;
-
-static int param_set_bool_enable_only(const char *val,
-				      const struct kernel_param *kp)
+static void module_assert_mutex(void)
 {
-	int err;
-	bool test;
-	struct kernel_param dummy_kp = *kp;
-
-	dummy_kp.arg = &test;
-
-	err = param_set_bool(val, &dummy_kp);
-	if (err)
-		return err;
-
-	/* Don't let them unset it once it's set! */
-	if (!test && sig_enforce)
-		return -EROFS;
-
-	if (test)
-		sig_enforce = true;
-	return 0;
+	lockdep_assert_held(&module_mutex);
 }
 
-static const struct kernel_param_ops param_ops_bool_enable_only = {
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = param_set_bool_enable_only,
-	.get = param_get_bool,
-};
-#define param_check_bool_enable_only param_check_bool
+static void module_assert_mutex_or_preempt(void)
+{
+#ifdef CONFIG_LOCKDEP
+	if (unlikely(!debug_locks))
+		return;
 
+	WARN_ON(!rcu_read_lock_sched_held() &&
+		!lockdep_is_held(&module_mutex));
+#endif
+}
+
+static bool sig_enforce = IS_ENABLED(CONFIG_MODULE_SIG_FORCE);
+#ifndef CONFIG_MODULE_SIG_FORCE
 module_param(sig_enforce, bool_enable_only, 0644);
 #endif /* !CONFIG_MODULE_SIG_FORCE */
-#endif /* CONFIG_MODULE_SIG */
 
 /* Block module loading/unloading? */
 int modules_disabled = 0;
@@ -152,10 +305,6 @@ core_param(nomodule, modules_disabled, bint, 0);
 static DECLARE_WAIT_QUEUE_HEAD(module_wq);
 
 static BLOCKING_NOTIFIER_HEAD(module_notify_list);
-
-/* Bounds of module allocation, for speeding __module_address.
- * Protected by module_mutex. */
-static unsigned long module_addr_min = -1UL, module_addr_max = 0;
 
 int register_module_notifier(struct notifier_block *nb)
 {
@@ -178,6 +327,9 @@ struct load_info {
 	struct _ddebug *debug;
 	unsigned int num_debug;
 	bool sig_ok;
+#ifdef CONFIG_KALLSYMS
+	unsigned long mod_kallsyms_init_off;
+#endif
 	struct {
 		unsigned int sym, str, mod, vers, info, pcpu;
 	} index;
@@ -318,6 +470,8 @@ bool each_symbol_section(bool (*fn)(const struct symsearch *arr,
 #endif
 	};
 
+	module_assert_mutex_or_preempt();
+
 	if (each_symbol_in_section(arr, ARRAY_SIZE(arr), NULL, fn, data))
 		return true;
 
@@ -387,9 +541,9 @@ static bool check_symbol(const struct symsearch *syms,
 		pr_warn("Symbol %s is marked as UNUSED, however this module is "
 			"using it.\n", fsa->name);
 		pr_warn("This symbol will go away in the future.\n");
-		pr_warn("Please evalute if this is the right api to use and if "
-			"it really is, submit a report the linux kernel "
-			"mailinglist together with submitting your code for "
+		pr_warn("Please evaluate if this is the right api to use and "
+			"if it really is, submit a report to the linux kernel "
+			"mailing list together with submitting your code for "
 			"inclusion.\n");
 	}
 #endif
@@ -451,11 +605,16 @@ const struct kernel_symbol *find_symbol(const char *name,
 }
 EXPORT_SYMBOL_GPL(find_symbol);
 
-/* Search for module by name: must hold module_mutex. */
+/*
+ * Search for module by name: must hold module_mutex (or preempt disabled
+ * for read-only access).
+ */
 static struct module *find_module_all(const char *name, size_t len,
 				      bool even_unformed)
 {
 	struct module *mod;
+
+	module_assert_mutex_or_preempt();
 
 	list_for_each_entry(mod, &modules, list) {
 		if (!even_unformed && mod->state == MODULE_STATE_UNFORMED)
@@ -468,6 +627,7 @@ static struct module *find_module_all(const char *name, size_t len,
 
 struct module *find_module(const char *name)
 {
+	module_assert_mutex();
 	return find_module_all(name, strlen(name), false);
 }
 EXPORT_SYMBOL_GPL(find_module);
@@ -906,11 +1066,15 @@ void symbol_put_addr(void *addr)
 	if (core_kernel_text(a))
 		return;
 
-	/* module_text_address is safe here: we're supposed to have reference
-	 * to module from symbol_get, so it can't go away. */
+	/*
+	 * Even though we hold a reference on the module; we still need to
+	 * disable preemption in order to safely traverse the data structure.
+	 */
+	preempt_disable();
 	modaddr = __module_text_address(a);
 	BUG_ON(!modaddr);
 	module_put(modaddr);
+	preempt_enable();
 }
 EXPORT_SYMBOL_GPL(symbol_put_addr);
 
@@ -1169,11 +1333,17 @@ static inline int check_modstruct_version(Elf_Shdr *sechdrs,
 {
 	const unsigned long *crc;
 
-	/* Since this should be found in kernel (which can't be removed),
-	 * no locking is necessary. */
+	/*
+	 * Since this should be found in kernel (which can't be removed), no
+	 * locking is necessary -- use preempt_disable() to placate lockdep.
+	 */
+	preempt_disable();
 	if (!find_symbol(VMLINUX_SYMBOL_STR(module_layout), NULL,
-			 &crc, true, false))
+			 &crc, true, false)) {
+		preempt_enable();
 		BUG();
+	}
+	preempt_enable();
 	return check_version(sechdrs, versindex,
 			     VMLINUX_SYMBOL_STR(module_layout), mod, crc,
 			     NULL);
@@ -1661,6 +1831,10 @@ static void mod_sysfs_fini(struct module *mod)
 	mod_kobject_put(mod);
 }
 
+static void init_param_lock(struct module *mod)
+{
+	mutex_init(&mod->param_lock);
+}
 #else /* !CONFIG_SYSFS */
 
 static int mod_sysfs_setup(struct module *mod,
@@ -1683,6 +1857,9 @@ static void del_usage_links(struct module *mod)
 {
 }
 
+static void init_param_lock(struct module *mod)
+{
+}
 #endif /* CONFIG_SYSFS */
 
 static void mod_sysfs_teardown(struct module *mod)
@@ -1852,10 +2029,11 @@ static void free_module(struct module *mod)
 	mutex_lock(&module_mutex);
 	/* Unlink carefully: kallsyms could be walking list. */
 	list_del_rcu(&mod->list);
+	mod_tree_remove(mod);
 	/* Remove this module from bug list, this uses list_del_rcu */
 	module_bug_cleanup(mod);
-	/* Wait for RCU synchronizing before releasing mod->list and buglist. */
-	synchronize_rcu();
+	/* Wait for RCU-sched synchronizing before releasing mod->list and buglist. */
+	synchronize_sched();
 	mutex_unlock(&module_mutex);
 
 	/* This may be NULL, but that's OK */
@@ -2317,10 +2495,21 @@ static void layout_symtab(struct module *mod, struct load_info *info)
 	strsect->sh_flags |= SHF_ALLOC;
 	strsect->sh_entsize = get_offset(mod, &mod->init_size, strsect,
 					 info->index.str) | INIT_OFFSET_MASK;
-	mod->init_size = debug_align(mod->init_size);
 	pr_debug("\t%s\n", info->secstrings + strsect->sh_name);
+
+	/* We'll tack temporary mod_kallsyms on the end. */
+	mod->init_size = ALIGN(mod->init_size,
+			       __alignof__(struct mod_kallsyms));
+	info->mod_kallsyms_init_off = mod->init_size;
+	mod->init_size += sizeof(struct mod_kallsyms);
+	mod->init_size = debug_align(mod->init_size);
 }
 
+/*
+ * We use the full symtab and strtab which layout_symtab arranged to
+ * be appended to the init section.  Later we switch to the cut-down
+ * core-only ones.
+ */
 static void add_kallsyms(struct module *mod, const struct load_info *info)
 {
 	unsigned int i, ndst;
@@ -2329,28 +2518,33 @@ static void add_kallsyms(struct module *mod, const struct load_info *info)
 	char *s;
 	Elf_Shdr *symsec = &info->sechdrs[info->index.sym];
 
-	mod->symtab = (void *)symsec->sh_addr;
-	mod->num_symtab = symsec->sh_size / sizeof(Elf_Sym);
+	/* Set up to point into init section. */
+	mod->kallsyms = mod->module_init + info->mod_kallsyms_init_off;
+
+	mod->kallsyms->symtab = (void *)symsec->sh_addr;
+	mod->kallsyms->num_symtab = symsec->sh_size / sizeof(Elf_Sym);
 	/* Make sure we get permanent strtab: don't use info->strtab. */
-	mod->strtab = (void *)info->sechdrs[info->index.str].sh_addr;
+	mod->kallsyms->strtab = (void *)info->sechdrs[info->index.str].sh_addr;
 
 	/* Set types up while we still have access to sections. */
-	for (i = 0; i < mod->num_symtab; i++)
-		mod->symtab[i].st_info = elf_type(&mod->symtab[i], info);
+	for (i = 0; i < mod->kallsyms->num_symtab; i++)
+		mod->kallsyms->symtab[i].st_info
+			= elf_type(&mod->kallsyms->symtab[i], info);
 
-	mod->core_symtab = dst = mod->module_core + info->symoffs;
-	mod->core_strtab = s = mod->module_core + info->stroffs;
-	src = mod->symtab;
-	for (ndst = i = 0; i < mod->num_symtab; i++) {
+	/* Now populate the cut down core kallsyms for after init. */
+	mod->core_kallsyms.symtab = dst = mod->module_core + info->symoffs;
+	mod->core_kallsyms.strtab = s = mod->module_core + info->stroffs;
+	src = mod->kallsyms->symtab;
+	for (ndst = i = 0; i < mod->kallsyms->num_symtab; i++) {
 		if (i == 0 ||
 		    is_core_symbol(src+i, info->sechdrs, info->hdr->e_shnum)) {
 			dst[ndst] = src[i];
-			dst[ndst++].st_name = s - mod->core_strtab;
-			s += strlcpy(s, &mod->strtab[src[i].st_name],
+			dst[ndst++].st_name = s - mod->core_kallsyms.strtab;
+			s += strlcpy(s, &mod->kallsyms->strtab[src[i].st_name],
 				     KSYM_NAME_LEN) + 1;
 		}
 	}
-	mod->core_num_syms = ndst;
+	mod->core_kallsyms.num_symtab = ndst;
 }
 #else
 static inline void layout_symtab(struct module *mod, struct load_info *info)
@@ -2384,22 +2578,6 @@ void * __weak module_alloc(unsigned long size)
 	return vmalloc_exec(size);
 }
 
-static void *module_alloc_update_bounds(unsigned long size)
-{
-	void *ret = module_alloc(size);
-
-	if (ret) {
-		mutex_lock(&module_mutex);
-		/* Update module bounds. */
-		if ((unsigned long)ret < module_addr_min)
-			module_addr_min = (unsigned long)ret;
-		if ((unsigned long)ret + size > module_addr_max)
-			module_addr_max = (unsigned long)ret + size;
-		mutex_unlock(&module_mutex);
-	}
-	return ret;
-}
-
 #ifdef CONFIG_DEBUG_KMEMLEAK
 static void kmemleak_load_module(const struct module *mod,
 				 const struct load_info *info)
@@ -2428,13 +2606,18 @@ static inline void kmemleak_load_module(const struct module *mod,
 #endif
 
 #ifdef CONFIG_MODULE_SIG
-static int module_sig_check(struct load_info *info)
+static int module_sig_check(struct load_info *info, int flags)
 {
 	int err = -ENOKEY;
 	const unsigned long markerlen = sizeof(MODULE_SIG_STRING) - 1;
 	const void *mod = info->hdr;
 
-	if (info->len > markerlen &&
+	/*
+	 * Require flags == 0, as a module with version information
+	 * removed is no longer the module that was signed
+	 */
+	if (flags == 0 &&
+	    info->len > markerlen &&
 	    memcmp(mod + info->len - markerlen, MODULE_SIG_STRING, markerlen) == 0) {
 		/* We truncate the module to discard the signature */
 		info->len -= markerlen;
@@ -2453,7 +2636,7 @@ static int module_sig_check(struct load_info *info)
 	return err;
 }
 #else /* !CONFIG_MODULE_SIG */
-static int module_sig_check(struct load_info *info)
+static int module_sig_check(struct load_info *info, int flags)
 {
 	return 0;
 }
@@ -2511,7 +2694,8 @@ static int copy_module_from_user(const void __user *umod, unsigned long len,
 		return err;
 
 	/* Suck in entire file: we'll want most of it. */
-	info->hdr = vmalloc(info->len);
+	info->hdr = __vmalloc(info->len,
+			GFP_KERNEL | __GFP_HIGHMEM | __GFP_NOWARN, PAGE_KERNEL);
 	if (!info->hdr)
 		return -ENOMEM;
 
@@ -2804,7 +2988,7 @@ static int move_module(struct module *mod, struct load_info *info)
 	void *ptr;
 
 	/* Do the allocs. */
-	ptr = module_alloc_update_bounds(mod->core_size);
+	ptr = module_alloc(mod->core_size);
 	/*
 	 * The pointer to this block is stored in the module structure
 	 * which is inside the block. Just mark it as not being a
@@ -2818,7 +3002,7 @@ static int move_module(struct module *mod, struct load_info *info)
 	mod->module_core = ptr;
 
 	if (mod->init_size) {
-		ptr = module_alloc_update_bounds(mod->init_size);
+		ptr = module_alloc(mod->init_size);
 		/*
 		 * The pointer to this block is stored in the module structure
 		 * which is inside the block. This block doesn't need to be
@@ -3106,7 +3290,7 @@ static noinline int do_init_module(struct module *mod)
 	 *
 	 * http://thread.gmane.org/gmane.linux.kernel/1420814
 	 */
-	if (current->flags & PF_USED_ASYNC)
+	if (!mod->async_probe_requested && (current->flags & PF_USED_ASYNC))
 		async_synchronize_full();
 
 	mutex_lock(&module_mutex);
@@ -3114,10 +3298,10 @@ static noinline int do_init_module(struct module *mod)
 	module_put(mod);
 	trim_init_extable(mod);
 #ifdef CONFIG_KALLSYMS
-	mod->num_symtab = mod->core_num_syms;
-	mod->symtab = mod->core_symtab;
-	mod->strtab = mod->core_strtab;
+	/* Switch to core kallsyms now init is done: kallsyms may be walking! */
+	rcu_assign_pointer(mod->kallsyms, &mod->core_kallsyms);
 #endif
+	mod_tree_remove_init(mod);
 	unset_module_init_ro_nx(mod);
 	module_arch_freeing_init(mod);
 	mod->module_init = NULL;
@@ -3126,11 +3310,11 @@ static noinline int do_init_module(struct module *mod)
 	mod->init_text_size = 0;
 	/*
 	 * We want to free module_init, but be aware that kallsyms may be
-	 * walking this with preempt disabled.  In all the failure paths,
-	 * we call synchronize_rcu/synchronize_sched, but we don't want
-	 * to slow down the success path, so use actual RCU here.
+	 * walking this with preempt disabled.  In all the failure paths, we
+	 * call synchronize_sched(), but we don't want to slow down the success
+	 * path, so use actual RCU here.
 	 */
-	call_rcu(&freeinit->rcu, do_free_init);
+	call_rcu_sched(&freeinit->rcu, do_free_init);
 	mutex_unlock(&module_mutex);
 	wake_up_all(&module_wq);
 
@@ -3187,7 +3371,9 @@ again:
 		err = -EEXIST;
 		goto out;
 	}
+	mod_update_bounds(mod);
 	list_add_rcu(&mod->list, &modules);
+	mod_tree_insert(mod);
 	err = 0;
 
 out:
@@ -3236,10 +3422,19 @@ out:
 	return err;
 }
 
-static int unknown_module_param_cb(char *param, char *val, const char *modname)
+static int unknown_module_param_cb(char *param, char *val, const char *modname,
+				   void *arg)
 {
+	struct module *mod = arg;
+	int ret;
+
+	if (strcmp(param, "async_probe") == 0) {
+		mod->async_probe_requested = true;
+		return 0;
+	}
+
 	/* Check for magic 'dyndbg' arg */
-	int ret = ddebug_dyndbg_module_param_cb(param, val, modname);
+	ret = ddebug_dyndbg_module_param_cb(param, val, modname);
 	if (ret != 0)
 		pr_warn("%s: unknown parameter '%s' ignored\n", modname, param);
 	return 0;
@@ -3254,7 +3449,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	long err;
 	char *after_dashes;
 
-	err = module_sig_check(info);
+	err = module_sig_check(info, flags);
 	if (err)
 		goto free_copy;
 
@@ -3293,6 +3488,8 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	err = module_unload_init(mod);
 	if (err)
 		goto unlink_mod;
+
+	init_param_lock(mod);
 
 	/* Now we've got everything in the final locations, we can
 	 * find optional sections. */
@@ -3341,7 +3538,8 @@ static int load_module(struct load_info *info, const char __user *uargs,
 
 	/* Module is ready to execute: parsing args may do that. */
 	after_dashes = parse_args(mod->name, mod->args, mod->kp, mod->num_kp,
-				  -32768, 32767, unknown_module_param_cb);
+				  -32768, 32767, mod,
+				  unknown_module_param_cb);
 	if (IS_ERR(after_dashes)) {
 		err = PTR_ERR(after_dashes);
 		goto bug_cleanup;
@@ -3369,6 +3567,9 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	module_bug_cleanup(mod);
 	mutex_unlock(&module_mutex);
 
+	blocking_notifier_call_chain(&module_notify_list,
+				     MODULE_STATE_GOING, mod);
+
 	/* we can't deallocate the module until we clear memory protection */
 	unset_module_init_ro_nx(mod);
 	unset_module_core_ro_nx(mod);
@@ -3387,11 +3588,18 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	mutex_lock(&module_mutex);
 	/* Unlink carefully: kallsyms could be walking list. */
 	list_del_rcu(&mod->list);
+	mod_tree_remove(mod);
 	wake_up_all(&module_wq);
-	/* Wait for RCU synchronizing before releasing mod->list. */
-	synchronize_rcu();
+	/* Wait for RCU-sched synchronizing before releasing mod->list. */
+	synchronize_sched();
 	mutex_unlock(&module_mutex);
  free_module:
+	/*
+	 * Ftrace needs to clean up what it initialized.
+	 * This does nothing if ftrace_module_init() wasn't called,
+	 * but it must be called outside of module_mutex.
+	 */
+	ftrace_release_mod(mod);
 	/* Free lock-classes; relies on the preceding sync_rcu() */
 	lockdep_free_key_range(mod->module_core, mod->core_size);
 
@@ -3461,6 +3669,11 @@ static inline int is_arm_mapping_symbol(const char *str)
 	       && (str[2] == '\0' || str[2] == '.');
 }
 
+static const char *symname(struct mod_kallsyms *kallsyms, unsigned int symnum)
+{
+	return kallsyms->strtab + kallsyms->symtab[symnum].st_name;
+}
+
 static const char *get_ksymbol(struct module *mod,
 			       unsigned long addr,
 			       unsigned long *size,
@@ -3468,6 +3681,7 @@ static const char *get_ksymbol(struct module *mod,
 {
 	unsigned int i, best = 0;
 	unsigned long nextval;
+	struct mod_kallsyms *kallsyms = rcu_dereference_sched(mod->kallsyms);
 
 	/* At worse, next value is at end of module */
 	if (within_module_init(addr, mod))
@@ -3477,32 +3691,32 @@ static const char *get_ksymbol(struct module *mod,
 
 	/* Scan for closest preceding symbol, and next symbol. (ELF
 	   starts real symbols at 1). */
-	for (i = 1; i < mod->num_symtab; i++) {
-		if (mod->symtab[i].st_shndx == SHN_UNDEF)
+	for (i = 1; i < kallsyms->num_symtab; i++) {
+		if (kallsyms->symtab[i].st_shndx == SHN_UNDEF)
 			continue;
 
 		/* We ignore unnamed symbols: they're uninformative
 		 * and inserted at a whim. */
-		if (mod->symtab[i].st_value <= addr
-		    && mod->symtab[i].st_value > mod->symtab[best].st_value
-		    && *(mod->strtab + mod->symtab[i].st_name) != '\0'
-		    && !is_arm_mapping_symbol(mod->strtab + mod->symtab[i].st_name))
+		if (*symname(kallsyms, i) == '\0'
+		    || is_arm_mapping_symbol(symname(kallsyms, i)))
+			continue;
+
+		if (kallsyms->symtab[i].st_value <= addr
+		    && kallsyms->symtab[i].st_value > kallsyms->symtab[best].st_value)
 			best = i;
-		if (mod->symtab[i].st_value > addr
-		    && mod->symtab[i].st_value < nextval
-		    && *(mod->strtab + mod->symtab[i].st_name) != '\0'
-		    && !is_arm_mapping_symbol(mod->strtab + mod->symtab[i].st_name))
-			nextval = mod->symtab[i].st_value;
+		if (kallsyms->symtab[i].st_value > addr
+		    && kallsyms->symtab[i].st_value < nextval)
+			nextval = kallsyms->symtab[i].st_value;
 	}
 
 	if (!best)
 		return NULL;
 
 	if (size)
-		*size = nextval - mod->symtab[best].st_value;
+		*size = nextval - kallsyms->symtab[best].st_value;
 	if (offset)
-		*offset = addr - mod->symtab[best].st_value;
-	return mod->strtab + mod->symtab[best].st_name;
+		*offset = addr - kallsyms->symtab[best].st_value;
+	return symname(kallsyms, best);
 }
 
 /* For kallsyms to ask for address resolution.  NULL means not found.  Careful
@@ -3513,19 +3727,15 @@ const char *module_address_lookup(unsigned long addr,
 			    char **modname,
 			    char *namebuf)
 {
-	struct module *mod;
 	const char *ret = NULL;
+	struct module *mod;
 
 	preempt_disable();
-	list_for_each_entry_rcu(mod, &modules, list) {
-		if (mod->state == MODULE_STATE_UNFORMED)
-			continue;
-		if (within_module(addr, mod)) {
-			if (modname)
-				*modname = mod->name;
-			ret = get_ksymbol(mod, addr, size, offset);
-			break;
-		}
+	mod = __module_address(addr);
+	if (mod) {
+		if (modname)
+			*modname = mod->name;
+		ret = get_ksymbol(mod, addr, size, offset);
 	}
 	/* Make a copy in here where it's safe */
 	if (ret) {
@@ -3533,6 +3743,7 @@ const char *module_address_lookup(unsigned long addr,
 		ret = namebuf;
 	}
 	preempt_enable();
+
 	return ret;
 }
 
@@ -3595,19 +3806,21 @@ int module_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
 
 	preempt_disable();
 	list_for_each_entry_rcu(mod, &modules, list) {
+		struct mod_kallsyms *kallsyms;
+
 		if (mod->state == MODULE_STATE_UNFORMED)
 			continue;
-		if (symnum < mod->num_symtab) {
-			*value = mod->symtab[symnum].st_value;
-			*type = mod->symtab[symnum].st_info;
-			strlcpy(name, mod->strtab + mod->symtab[symnum].st_name,
-				KSYM_NAME_LEN);
+		kallsyms = rcu_dereference_sched(mod->kallsyms);
+		if (symnum < kallsyms->num_symtab) {
+			*value = kallsyms->symtab[symnum].st_value;
+			*type = kallsyms->symtab[symnum].st_info;
+			strlcpy(name, symname(kallsyms, symnum), KSYM_NAME_LEN);
 			strlcpy(module_name, mod->name, MODULE_NAME_LEN);
 			*exported = is_exported(name, *value, mod);
 			preempt_enable();
 			return 0;
 		}
-		symnum -= mod->num_symtab;
+		symnum -= kallsyms->num_symtab;
 	}
 	preempt_enable();
 	return -ERANGE;
@@ -3616,11 +3829,12 @@ int module_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
 static unsigned long mod_find_symname(struct module *mod, const char *name)
 {
 	unsigned int i;
+	struct mod_kallsyms *kallsyms = rcu_dereference_sched(mod->kallsyms);
 
-	for (i = 0; i < mod->num_symtab; i++)
-		if (strcmp(name, mod->strtab+mod->symtab[i].st_name) == 0 &&
-		    mod->symtab[i].st_info != 'U')
-			return mod->symtab[i].st_value;
+	for (i = 0; i < kallsyms->num_symtab; i++)
+		if (strcmp(name, symname(kallsyms, i)) == 0 &&
+		    kallsyms->symtab[i].st_info != 'U')
+			return kallsyms->symtab[i].st_value;
 	return 0;
 }
 
@@ -3656,12 +3870,17 @@ int module_kallsyms_on_each_symbol(int (*fn)(void *, const char *,
 	unsigned int i;
 	int ret;
 
+	module_assert_mutex();
+
 	list_for_each_entry(mod, &modules, list) {
+		/* We hold module_mutex: no need for rcu_dereference_sched */
+		struct mod_kallsyms *kallsyms = mod->kallsyms;
+
 		if (mod->state == MODULE_STATE_UNFORMED)
 			continue;
-		for (i = 0; i < mod->num_symtab; i++) {
-			ret = fn(data, mod->strtab + mod->symtab[i].st_name,
-				 mod, mod->symtab[i].st_value);
+		for (i = 0; i < kallsyms->num_symtab; i++) {
+			ret = fn(data, symname(kallsyms, i),
+				 mod, kallsyms->symtab[i].st_value);
 			if (ret != 0)
 				return ret;
 		}
@@ -3830,13 +4049,15 @@ struct module *__module_address(unsigned long addr)
 	if (addr < module_addr_min || addr > module_addr_max)
 		return NULL;
 
-	list_for_each_entry_rcu(mod, &modules, list) {
+	module_assert_mutex_or_preempt();
+
+	mod = mod_find(addr);
+	if (mod) {
+		BUG_ON(!within_module(addr, mod));
 		if (mod->state == MODULE_STATE_UNFORMED)
-			continue;
-		if (within_module(addr, mod))
-			return mod;
+			mod = NULL;
 	}
-	return NULL;
+	return mod;
 }
 EXPORT_SYMBOL_GPL(__module_address);
 

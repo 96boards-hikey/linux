@@ -272,21 +272,26 @@
 /* ADMA2 32-bit DMA descriptor size */
 #define SDHCI_ADMA2_32_DESC_SZ	8
 
-/* ADMA2 32-bit DMA alignment */
-#define SDHCI_ADMA2_32_ALIGN	4
-
 /* ADMA2 32-bit descriptor */
 struct sdhci_adma2_32_desc {
 	__le16	cmd;
 	__le16	len;
 	__le32	addr;
-}  __packed __aligned(SDHCI_ADMA2_32_ALIGN);
+}  __packed __aligned(4);
+
+/* ADMA2 data alignment */
+#define SDHCI_ADMA2_ALIGN	4
+#define SDHCI_ADMA2_MASK	(SDHCI_ADMA2_ALIGN - 1)
+
+/*
+ * ADMA2 descriptor alignment.  Some controllers (e.g. Intel) require 8 byte
+ * alignment for the descriptor table even in 32-bit DMA mode.  Memory
+ * allocation is at least 8 byte aligned anyway, so just stipulate 8 always.
+ */
+#define SDHCI_ADMA2_DESC_ALIGN	8
 
 /* ADMA2 64-bit DMA descriptor size */
 #define SDHCI_ADMA2_64_DESC_SZ	12
-
-/* ADMA2 64-bit DMA alignment */
-#define SDHCI_ADMA2_64_ALIGN	8
 
 /*
  * ADMA2 64-bit descriptor. Note 12-byte descriptor can't always be 8-byte
@@ -309,9 +314,10 @@ struct sdhci_adma2_64_desc {
  */
 #define SDHCI_MAX_SEGS		128
 
-struct sdhci_host_next {
-	unsigned int	sg_count;
-	s32		cookie;
+enum sdhci_cookie {
+	COOKIE_UNMAPPED,
+	COOKIE_MAPPED,
+	COOKIE_GIVEN,
 };
 
 struct sdhci_host {
@@ -409,6 +415,13 @@ struct sdhci_host {
 #define SDHCI_QUIRK2_SUPPORT_SINGLE			(1<<13)
 /* Controller broken with using ACMD23 */
 #define SDHCI_QUIRK2_ACMD23_BROKEN			(1<<14)
+/* Broken Clock divider zero in controller */
+#define SDHCI_QUIRK2_CLOCK_DIV_ZERO_BROKEN		(1<<15)
+/*
+ * When internal clock is disabled, a delay is needed before modifying the
+ * SD clock frequency or enabling back the internal clock.
+ */
+#define SDHCI_QUIRK2_NEED_DELAY_AFTER_INT_CLK_RST	(1<<16)
 
 	int irq;		/* Device IRQ */
 	void __iomem *ioaddr;	/* Mapped address */
@@ -417,6 +430,7 @@ struct sdhci_host {
 
 	/* Internal data */
 	struct mmc_host *mmc;	/* MMC structure */
+	struct mmc_host_ops mmc_host_ops;	/* MMC host ops */
 	u64 dma_mask;		/* custom DMA mask */
 
 #if defined(CONFIG_LEDS_CLASS) || defined(CONFIG_LEDS_CLASS_MODULE)
@@ -432,13 +446,11 @@ struct sdhci_host {
 #define SDHCI_REQ_USE_DMA	(1<<2)	/* Use DMA for this req. */
 #define SDHCI_DEVICE_DEAD	(1<<3)	/* Device unresponsive */
 #define SDHCI_SDR50_NEEDS_TUNING (1<<4)	/* SDR50 needs tuning */
-#define SDHCI_NEEDS_RETUNING	(1<<5)	/* Host needs retuning */
 #define SDHCI_AUTO_CMD12	(1<<6)	/* Auto CMD12 support */
 #define SDHCI_AUTO_CMD23	(1<<7)	/* Auto CMD23 support */
 #define SDHCI_PV_ENABLED	(1<<8)	/* Preset value enabled */
 #define SDHCI_SDIO_IRQ_ENABLED	(1<<9)	/* SDIO irq enabled */
 #define SDHCI_SDR104_NEEDS_TUNING (1<<10)	/* SDR104/HS200 needs tuning */
-#define SDHCI_USING_RETUNING_TIMER (1<<11)	/* Host is using a retuning timer for the card */
 #define SDHCI_USE_64_BIT_DMA	(1<<12)	/* Use 64-bit DMA */
 #define SDHCI_HS400_TUNING	(1<<13)	/* Tuning for HS400 */
 
@@ -476,8 +488,6 @@ struct sdhci_host {
 	dma_addr_t align_addr;	/* Mapped bounce buffer */
 
 	unsigned int desc_sz;	/* ADMA descriptor size */
-	unsigned int align_sz;	/* ADMA alignment */
-	unsigned int align_mask;	/* ADMA alignment mask */
 
 	struct tasklet_struct finish_tasklet;	/* Tasklet structures */
 
@@ -504,9 +514,7 @@ struct sdhci_host {
 	unsigned int		tuning_count;	/* Timer count for re-tuning */
 	unsigned int		tuning_mode;	/* Re-tuning mode supported by host */
 #define SDHCI_TUNING_MODE_1	0
-	struct timer_list	tuning_timer;	/* Timer for tuning */
 
-	struct sdhci_host_next	next_data;
 	unsigned long private[0] ____cacheline_aligned;
 };
 
@@ -541,6 +549,10 @@ struct sdhci_ops {
 	void	(*platform_init)(struct sdhci_host *host);
 	void    (*card_event)(struct sdhci_host *host);
 	void	(*voltage_switch)(struct sdhci_host *host);
+	int	(*select_drive_strength)(struct sdhci_host *host,
+					 struct mmc_card *card,
+					 unsigned int max_dtr, int host_drv,
+					 int card_drv, int *drv_type);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS

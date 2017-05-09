@@ -1743,7 +1743,6 @@ static int onenand_panic_write(struct mtd_info *mtd, loff_t to, size_t len,
 	struct onenand_chip *this = mtd->priv;
 	int column, subpage;
 	int written = 0;
-	int ret = 0;
 
 	if (this->state == FL_PM_SUSPENDED)
 		return -EBUSY;
@@ -1786,15 +1785,10 @@ static int onenand_panic_write(struct mtd_info *mtd, loff_t to, size_t len,
 		onenand_panic_wait(mtd);
 
 		/* In partial page write we don't update bufferram */
-		onenand_update_bufferram(mtd, to, !ret && !subpage);
+		onenand_update_bufferram(mtd, to, !subpage);
 		if (ONENAND_IS_2PLANE(this)) {
 			ONENAND_SET_BUFFERRAM1(this);
-			onenand_update_bufferram(mtd, to + this->writesize, !ret && !subpage);
-		}
-
-		if (ret) {
-			printk(KERN_ERR "%s: write failed %d\n", __func__, ret);
-			break;
+			onenand_update_bufferram(mtd, to + this->writesize, !subpage);
 		}
 
 		written += thislen;
@@ -1808,7 +1802,7 @@ static int onenand_panic_write(struct mtd_info *mtd, loff_t to, size_t len,
 	}
 
 	*retlen = written;
-	return ret;
+	return 0;
 }
 
 /**
@@ -2605,6 +2599,7 @@ static int onenand_default_block_markbad(struct mtd_info *mtd, loff_t ofs)
  */
 static int onenand_block_markbad(struct mtd_info *mtd, loff_t ofs)
 {
+	struct onenand_chip *this = mtd->priv;
 	int ret;
 
 	ret = onenand_block_isbad(mtd, ofs);
@@ -2616,7 +2611,7 @@ static int onenand_block_markbad(struct mtd_info *mtd, loff_t ofs)
 	}
 
 	onenand_get_device(mtd, FL_WRITING);
-	ret = mtd_block_markbad(mtd, ofs);
+	ret = this->block_markbad(mtd, ofs);
 	onenand_release_device(mtd);
 	return ret;
 }

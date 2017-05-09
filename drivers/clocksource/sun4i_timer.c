@@ -81,25 +81,25 @@ static void sun4i_clkevt_time_start(u8 timer, bool periodic)
 	       timer_base + TIMER_CTL_REG(timer));
 }
 
-static void sun4i_clkevt_mode(enum clock_event_mode mode,
-			      struct clock_event_device *clk)
+static int sun4i_clkevt_shutdown(struct clock_event_device *evt)
 {
-	switch (mode) {
-	case CLOCK_EVT_MODE_PERIODIC:
-		sun4i_clkevt_time_stop(0);
-		sun4i_clkevt_time_setup(0, ticks_per_jiffy);
-		sun4i_clkevt_time_start(0, true);
-		break;
-	case CLOCK_EVT_MODE_ONESHOT:
-		sun4i_clkevt_time_stop(0);
-		sun4i_clkevt_time_start(0, false);
-		break;
-	case CLOCK_EVT_MODE_UNUSED:
-	case CLOCK_EVT_MODE_SHUTDOWN:
-	default:
-		sun4i_clkevt_time_stop(0);
-		break;
-	}
+	sun4i_clkevt_time_stop(0);
+	return 0;
+}
+
+static int sun4i_clkevt_set_oneshot(struct clock_event_device *evt)
+{
+	sun4i_clkevt_time_stop(0);
+	sun4i_clkevt_time_start(0, false);
+	return 0;
+}
+
+static int sun4i_clkevt_set_periodic(struct clock_event_device *evt)
+{
+	sun4i_clkevt_time_stop(0);
+	sun4i_clkevt_time_setup(0, ticks_per_jiffy);
+	sun4i_clkevt_time_start(0, true);
+	return 0;
 }
 
 static int sun4i_clkevt_next_event(unsigned long evt,
@@ -116,16 +116,23 @@ static struct clock_event_device sun4i_clockevent = {
 	.name = "sun4i_tick",
 	.rating = 350,
 	.features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT,
-	.set_mode = sun4i_clkevt_mode,
+	.set_state_shutdown = sun4i_clkevt_shutdown,
+	.set_state_periodic = sun4i_clkevt_set_periodic,
+	.set_state_oneshot = sun4i_clkevt_set_oneshot,
+	.tick_resume = sun4i_clkevt_shutdown,
 	.set_next_event = sun4i_clkevt_next_event,
 };
 
+static void sun4i_timer_clear_interrupt(void)
+{
+	writel(TIMER_IRQ_EN(0), timer_base + TIMER_IRQ_ST_REG);
+}
 
 static irqreturn_t sun4i_timer_interrupt(int irq, void *dev_id)
 {
 	struct clock_event_device *evt = (struct clock_event_device *)dev_id;
 
-	writel(0x1, timer_base + TIMER_IRQ_ST_REG);
+	sun4i_timer_clear_interrupt();
 	evt->event_handler(evt);
 
 	return IRQ_HANDLED;
@@ -189,6 +196,9 @@ static void __init sun4i_timer_init(struct device_node *node)
 
 	/* Make sure timer is stopped before playing with interrupts */
 	sun4i_clkevt_time_stop(0);
+
+	/* clear timer0 interrupt */
+	sun4i_timer_clear_interrupt();
 
 	sun4i_clockevent.cpumask = cpu_possible_mask;
 	sun4i_clockevent.irq = irq;

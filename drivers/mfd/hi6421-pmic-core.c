@@ -31,9 +31,16 @@
 #include <linux/regmap.h>
 #include <linux/mfd/hi6421-pmic.h>
 
+#ifdef CONFIG_REGULATOR_HI6421
 static const struct mfd_cell hi6421_devs[] = {
 	{ .name = "hi6421-regulator", },
 };
+#endif
+#ifdef CONFIG_REGULATOR_HI6421V530
+static const struct mfd_cell hi6421_devs[] = {
+	{ .name = "hi6421v530-regulator", },
+};
+#endif
 
 static const struct regmap_config hi6421_regmap_config = {
 	.reg_bits = 32,
@@ -66,6 +73,7 @@ static int hi6421_pmic_probe(struct platform_device *pdev)
 		return PTR_ERR(pmic->regmap);
 	}
 
+#ifdef CONFIG_REGULATOR_HI6421
 	/* set over-current protection debounce 8ms */
 	regmap_update_bits(pmic->regmap, HI6421_OCP_DEB_CTRL_REG,
 				(HI6421_OCP_DEB_SEL_MASK
@@ -73,6 +81,7 @@ static int hi6421_pmic_probe(struct platform_device *pdev)
 				 | HI6421_OCP_AUTO_STOP_MASK),
 				(HI6421_OCP_DEB_SEL_8MS
 				 | HI6421_OCP_EN_DEBOUNCE_ENABLE));
+#endif
 
 	platform_set_drvdata(pdev, pmic);
 
@@ -97,6 +106,7 @@ static const struct of_device_id of_hi6421_pmic_match_tbl[] = {
 	{ .compatible = "hisilicon,hi6421-pmic", },
 	{ },
 };
+MODULE_DEVICE_TABLE(of, of_hi6421_pmic_match_tbl);
 
 static struct platform_driver hi6421_pmic_driver = {
 	.driver = {

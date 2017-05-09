@@ -130,7 +130,7 @@ start:
 		.endr
    ARM(		mov	r0, r0		)
    ARM(		b	1f		)
- THUMB(		adr	r12, BSYM(1f)	)
+ THUMB(		badr	r12, 1f		)
  THUMB(		bx	r12		)
 
 		.word	_magic_sig	@ Magic numbers to help the loader
@@ -447,7 +447,7 @@ dtb_check_done:
 
 		bl	cache_clean_flush
 
-		adr	r0, BSYM(restart)
+		badr	r0, restart
 		add	r0, r0, r6
 		mov	pc, r0
 
@@ -776,8 +776,10 @@ __armv7_mmu_cache_on:
 		orrne	r0, r0, #1		@ MMU enabled
 		movne	r1, #0xfffffffd		@ domain 0 = client
 		bic     r6, r6, #1 << 31        @ 32-bit translation system
-		bic     r6, r6, #3 << 0         @ use only ttbr0
+		bic     r6, r6, #(7 << 0) | (1 << 4)	@ use only ttbr0
 		mcrne	p15, 0, r3, c2, c0, 0	@ load page table pointer
+		mcrne	p15, 0, r0, c8, c7, 0	@ flush I,D TLBs
+		mcr	p15, 0, r0, c7, c5, 4	@ ISB
 		mcrne	p15, 0, r1, c3, c0, 0	@ load domain access control
 		mcrne   p15, 0, r6, c2, c0, 2   @ load ttb control
 #endif

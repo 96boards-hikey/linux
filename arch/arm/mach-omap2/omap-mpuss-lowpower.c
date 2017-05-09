@@ -105,7 +105,7 @@ static void dummy_cpu_resume(void)
 static void dummy_scu_prepare(unsigned int cpu_id, unsigned int cpu_state)
 {}
 
-struct cpu_pm_ops omap_pm_ops = {
+static struct cpu_pm_ops omap_pm_ops = {
 	.finish_suspend		= default_finish_suspend,
 	.resume			= dummy_cpu_resume,
 	.scu_prepare		= dummy_scu_prepare,
@@ -243,10 +243,9 @@ int omap4_enter_lowpower(unsigned int cpu, unsigned int power_state)
 		save_state = 1;
 		break;
 	case PWRDM_POWER_RET:
-		if (IS_PM44XX_ERRATUM(PM_OMAP4_CPU_OSWR_DISABLE)) {
+		if (IS_PM44XX_ERRATUM(PM_OMAP4_CPU_OSWR_DISABLE))
 			save_state = 0;
-			break;
-		}
+		break;
 	default:
 		/*
 		 * CPUx CSWR is invalid hardware state. Also CPUx OSWR

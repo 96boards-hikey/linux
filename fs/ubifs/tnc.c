@@ -34,6 +34,11 @@
 #include <linux/slab.h>
 #include "ubifs.h"
 
+static int try_read_node(const struct ubifs_info *c, void *buf, int type,
+			 int len, int lnum, int offs);
+static int fallible_read_node(struct ubifs_info *c, const union ubifs_key *key,
+			      struct ubifs_zbranch *zbr, void *node);
+
 /*
  * Returned codes of 'matches_name()' and 'fallible_matches_name()' functions.
  * @NAME_LESS: name corresponding to the first argument is less than second
@@ -98,7 +103,7 @@ static int insert_old_idx(struct ubifs_info *c, int lnum, int offs)
 		else if (offs > o->offs)
 			p = &(*p)->rb_right;
 		else {
-			ubifs_err("old idx added twice!");
+			ubifs_err(c, "old idx added twice!");
 			kfree(old_idx);
 			return 0;
 		}
@@ -198,11 +203,10 @@ static struct ubifs_znode *copy_znode(struct ubifs_info *c,
 {
 	struct ubifs_znode *zn;
 
-	zn = kmalloc(c->max_znode_sz, GFP_NOFS);
+	zn = kmemdup(znode, c->max_znode_sz, GFP_NOFS);
 	if (unlikely(!zn))
 		return ERR_PTR(-ENOMEM);
 
-	memcpy(zn, znode, c->max_znode_sz);
 	zn->cnext = NULL;
 	__set_bit(DIRTY_ZNODE, &zn->flags);
 	__clear_bit(COW_ZNODE, &zn->flags);
@@ -403,7 +407,19 @@ static int tnc_read_node_nm(struct ubifs_info *c, struct ubifs_zbranch *zbr,
 		return 0;
 	}
 
-	err = ubifs_tnc_read_node(c, zbr, node);
+	if (c->replaying) {
+		err = fallible_read_node(c, &zbr->key, zbr, node);
+		/*
+		 * When the node was not found, return -ENOENT, 0 otherwise.
+		 * Negative return codes stay as-is.
+		 */
+		if (err == 0)
+			err = -ENOENT;
+		else if (err == 1)
+			err = 0;
+	} else {
+		err = ubifs_tnc_read_node(c, zbr, node);
+	}
 	if (err)
 		return err;
 
@@ -447,7 +463,7 @@ static int try_read_node(const struct ubifs_info *c, void *buf, int type,
 
 	err = ubifs_leb_read(c, lnum, buf, offs, len, 1);
 	if (err) {
-		ubifs_err("cannot read node type %d from LEB %d:%d, error %d",
+		ubifs_err(c, "cannot read node type %d from LEB %d:%d, error %d",
 			  type, lnum, offs, err);
 		return err;
 	}
@@ -1684,27 +1700,27 @@ static int validate_data_node(struct ubifs_info *c, void *buf,
 	int err, len;
 
 	if (ch->node_type != UBIFS_DATA_NODE) {
-		ubifs_err("bad node type (%d but expected %d)",
+		ubifs_err(c, "bad node type (%d but expected %d)",
 			  ch->node_type, UBIFS_DATA_NODE);
 		goto out_err;
 	}
 
 	err = ubifs_check_node(c, buf, zbr->lnum, zbr->offs, 0, 0);
 	if (err) {
-		ubifs_err("expected node type %d", UBIFS_DATA_NODE);
+		ubifs_err(c, "expected node type %d", UBIFS_DATA_NODE);
 		goto out;
 	}
 
 	len = le32_to_cpu(ch->len);
 	if (len != zbr->len) {
-		ubifs_err("bad node length %d, expected %d", len, zbr->len);
+		ubifs_err(c, "bad node length %d, expected %d", len, zbr->len);
 		goto out_err;
 	}
 
 	/* Make sure the key of the read node is correct */
 	key_read(c, buf + UBIFS_KEY_OFFSET, &key1);
 	if (!keys_eq(c, &zbr->key, &key1)) {
-		ubifs_err("bad key in node at LEB %d:%d",
+		ubifs_err(c, "bad key in node at LEB %d:%d",
 			  zbr->lnum, zbr->offs);
 		dbg_tnck(&zbr->key, "looked for key ");
 		dbg_tnck(&key1, "found node's key ");
@@ -1716,7 +1732,7 @@ static int validate_data_node(struct ubifs_info *c, void *buf,
 out_err:
 	err = -EINVAL;
 out:
-	ubifs_err("bad node at LEB %d:%d", zbr->lnum, zbr->offs);
+	ubifs_err(c, "bad node at LEB %d:%d", zbr->lnum, zbr->offs);
 	ubifs_dump_node(c, buf);
 	dump_stack();
 	return err;
@@ -1741,7 +1757,7 @@ int ubifs_tnc_bulk_read(struct ubifs_info *c, struct bu_info *bu)
 	len = bu->zbranch[bu->cnt - 1].offs;
 	len += bu->zbranch[bu->cnt - 1].len - offs;
 	if (len > bu->buf_len) {
-		ubifs_err("buffer too small %d vs %d", bu->buf_len, len);
+		ubifs_err(c, "buffer too small %d vs %d", bu->buf_len, len);
 		return -EINVAL;
 	}
 
@@ -1757,7 +1773,7 @@ int ubifs_tnc_bulk_read(struct ubifs_info *c, struct bu_info *bu)
 		return -EAGAIN;
 
 	if (err && err != -EBADMSG) {
-		ubifs_err("failed to read from LEB %d:%d, error %d",
+		ubifs_err(c, "failed to read from LEB %d:%d, error %d",
 			  lnum, offs, err);
 		dump_stack();
 		dbg_tnck(&bu->key, "key ");
@@ -2767,7 +2783,11 @@ struct ubifs_dent_node *ubifs_tnc_next_ent(struct ubifs_info *c,
 	if (nm->name) {
 		if (err) {
 			/* Handle collisions */
-			err = resolve_collision(c, key, &znode, &n, nm);
+			if (c->replaying)
+				err = fallible_resolve_collision(c, key, &znode, &n,
+							 nm, 0);
+			else
+				err = resolve_collision(c, key, &znode, &n, nm);
 			dbg_tnc("rc returned %d, znode %p, n %d",
 				err, znode, n);
 			if (unlikely(err < 0))
@@ -3313,7 +3333,7 @@ int dbg_check_inode_size(struct ubifs_info *c, const struct inode *inode,
 
 out_dump:
 	block = key_block(c, key);
-	ubifs_err("inode %lu has size %lld, but there are data at offset %lld",
+	ubifs_err(c, "inode %lu has size %lld, but there are data at offset %lld",
 		  (unsigned long)inode->i_ino, size,
 		  ((loff_t)block) << UBIFS_BLOCK_SHIFT);
 	mutex_unlock(&c->tnc_mutex);

@@ -22,6 +22,8 @@
 #include <linux/sched.h>
 #include <linux/scatterlist.h>
 #include <linux/vmalloc.h>
+#include <linux/hisi/ion-iommu.h>
+
 #include "ion.h"
 #include "ion_priv.h"
 
@@ -56,7 +58,7 @@ void *ion_heap_map_kernel(struct ion_heap *heap,
 	vaddr = vmap(pages, npages, VM_MAP, pgprot);
 	vfree(pages);
 
-	if (vaddr == NULL)
+	if (!vaddr)
 		return ERR_PTR(-ENOMEM);
 
 	return vaddr;
@@ -101,6 +103,31 @@ int ion_heap_map_user(struct ion_heap *heap, struct ion_buffer *buffer,
 			return 0;
 	}
 	return 0;
+}
+
+int ion_heap_map_iommu(struct ion_buffer *buffer,
+			struct ion_iommu_map *map_data)
+{
+	struct sg_table *table = buffer->sg_table;
+	int ret;
+
+	ret = hisi_iommu_map_domain(table->sgl, &map_data->format);
+	if (ret) {
+		pr_err("%s: iommu map failed, heap: %s\n", __func__,
+			buffer->heap->name);
+	}
+	return ret;
+}
+
+void ion_heap_unmap_iommu(struct ion_iommu_map *map_data)
+{
+	int ret;
+
+	ret = hisi_iommu_unmap_domain(&map_data->format);
+	if (ret) {
+		pr_err("%s: iommu unmap failed, heap: %s\n", __func__,
+			map_data->buffer->heap->name);
+	}
 }
 
 static int ion_heap_clear_pages(struct page **pages, int num, pgprot_t pgprot)
@@ -352,6 +379,7 @@ struct ion_heap *ion_heap_create(struct ion_platform_heap *heap_data)
 	heap->id = heap_data->id;
 	return heap;
 }
+EXPORT_SYMBOL(ion_heap_create);
 
 void ion_heap_destroy(struct ion_heap *heap)
 {
@@ -379,3 +407,4 @@ void ion_heap_destroy(struct ion_heap *heap)
 		       heap->type);
 	}
 }
+EXPORT_SYMBOL(ion_heap_destroy);

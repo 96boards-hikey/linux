@@ -243,8 +243,6 @@ drop_write_lock:
 }
 
 const struct file_operations reiserfs_file_operations = {
-	.read = new_sync_read,
-	.write = new_sync_write,
 	.unlocked_ioctl = reiserfs_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = reiserfs_compat_ioctl,
@@ -262,10 +260,10 @@ const struct file_operations reiserfs_file_operations = {
 
 const struct inode_operations reiserfs_file_inode_operations = {
 	.setattr = reiserfs_setattr,
-	.setxattr = reiserfs_setxattr,
-	.getxattr = reiserfs_getxattr,
+	.setxattr = generic_setxattr,
+	.getxattr = generic_getxattr,
 	.listxattr = reiserfs_listxattr,
-	.removexattr = reiserfs_removexattr,
+	.removexattr = generic_removexattr,
 	.permission = reiserfs_permission,
 	.get_acl = reiserfs_get_acl,
 	.set_acl = reiserfs_set_acl,

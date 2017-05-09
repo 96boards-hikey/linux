@@ -13,16 +13,35 @@
 #define MSR_IA32_QM_CTR		0x0c8e
 #define MSR_IA32_QM_EVTSEL	0x0c8d
 
-static unsigned int cqm_max_rmid = -1;
+static u32 cqm_max_rmid = -1;
 static unsigned int cqm_l3_scale; /* supposedly cacheline size */
 
-struct intel_cqm_state {
-	raw_spinlock_t		lock;
-	int			rmid;
-	int			cnt;
+/**
+ * struct intel_pqr_state - State cache for the PQR MSR
+ * @rmid:		The cached Resource Monitoring ID
+ * @closid:		The cached Class Of Service ID
+ * @rmid_usecnt:	The usage counter for rmid
+ *
+ * The upper 32 bits of MSR_IA32_PQR_ASSOC contain closid and the
+ * lower 10 bits rmid. The update to MSR_IA32_PQR_ASSOC always
+ * contains both parts, so we need to cache them.
+ *
+ * The cache also helps to avoid pointless updates if the value does
+ * not change.
+ */
+struct intel_pqr_state {
+	u32			rmid;
+	u32			closid;
+	int			rmid_usecnt;
 };
 
-static DEFINE_PER_CPU(struct intel_cqm_state, cqm_state);
+/*
+ * The cached intel_pqr_state is strictly per CPU and can never be
+ * updated from a remote CPU. Both functions which modify the state
+ * (intel_cqm_event_start and intel_cqm_event_stop) are called with
+ * interrupts disabled, which is sufficient for the protection.
+ */
+static DEFINE_PER_CPU(struct intel_pqr_state, pqr_state);
 
 /*
  * Protects cache_cgroups and cqm_rmid_free_lru and cqm_rmid_limbo_lru.
@@ -57,7 +76,7 @@ static cpumask_t cqm_cpumask;
  * near-zero occupancy value, i.e. no cachelines are tagged with this
  * RMID, once __intel_cqm_rmid_rotate() returns.
  */
-static unsigned int intel_cqm_rotation_rmid;
+static u32 intel_cqm_rotation_rmid;
 
 #define INVALID_RMID		(-1)
 
@@ -69,7 +88,7 @@ static unsigned int intel_cqm_rotation_rmid;
  * Likewise, an rmid value of -1 is used to indicate "no rmid currently
  * assigned" and is used as part of the rotation code.
  */
-static inline bool __rmid_valid(unsigned int rmid)
+static inline bool __rmid_valid(u32 rmid)
 {
 	if (!rmid || rmid == INVALID_RMID)
 		return false;
@@ -77,7 +96,7 @@ static inline bool __rmid_valid(unsigned int rmid)
 	return true;
 }
 
-static u64 __rmid_read(unsigned int rmid)
+static u64 __rmid_read(u32 rmid)
 {
 	u64 val;
 
@@ -102,7 +121,7 @@ enum rmid_recycle_state {
 };
 
 struct cqm_rmid_entry {
-	unsigned int rmid;
+	u32 rmid;
 	enum rmid_recycle_state state;
 	struct list_head list;
 	unsigned long queue_time;
@@ -147,7 +166,7 @@ static LIST_HEAD(cqm_rmid_limbo_lru);
  */
 static struct cqm_rmid_entry **cqm_rmid_ptrs;
 
-static inline struct cqm_rmid_entry *__rmid_entry(int rmid)
+static inline struct cqm_rmid_entry *__rmid_entry(u32 rmid)
 {
 	struct cqm_rmid_entry *entry;
 
@@ -162,7 +181,7 @@ static inline struct cqm_rmid_entry *__rmid_entry(int rmid)
  *
  * We expect to be called with cache_mutex held.
  */
-static int __get_rmid(void)
+static u32 __get_rmid(void)
 {
 	struct cqm_rmid_entry *entry;
 
@@ -177,7 +196,7 @@ static int __get_rmid(void)
 	return entry->rmid;
 }
 
-static void __put_rmid(unsigned int rmid)
+static void __put_rmid(u32 rmid)
 {
 	struct cqm_rmid_entry *entry;
 
@@ -192,6 +211,20 @@ static void __put_rmid(unsigned int rmid)
 	list_add_tail(&entry->list, &cqm_rmid_limbo_lru);
 }
 
+static void cqm_cleanup(void)
+{
+	int i;
+
+	if (!cqm_rmid_ptrs)
+		return;
+
+	for (i = 0; i < cqm_max_rmid; i++)
+		kfree(cqm_rmid_ptrs[i]);
+
+	kfree(cqm_rmid_ptrs);
+	cqm_rmid_ptrs = NULL;
+}
+
 static int intel_cqm_setup_rmid_cache(void)
 {
 	struct cqm_rmid_entry *entry;
@@ -199,7 +232,7 @@ static int intel_cqm_setup_rmid_cache(void)
 	int r = 0;
 
 	nr_rmids = cqm_max_rmid + 1;
-	cqm_rmid_ptrs = kmalloc(sizeof(struct cqm_rmid_entry *) *
+	cqm_rmid_ptrs = kzalloc(sizeof(struct cqm_rmid_entry *) *
 				nr_rmids, GFP_KERNEL);
 	if (!cqm_rmid_ptrs)
 		return -ENOMEM;
@@ -230,11 +263,9 @@ static int intel_cqm_setup_rmid_cache(void)
 	mutex_unlock(&cache_mutex);
 
 	return 0;
-fail:
-	while (r--)
-		kfree(cqm_rmid_ptrs[r]);
 
-	kfree(cqm_rmid_ptrs);
+fail:
+	cqm_cleanup();
 	return -ENOMEM;
 }
 
@@ -262,9 +293,13 @@ static bool __match_event(struct perf_event *a, struct perf_event *b)
 
 	/*
 	 * Events that target same task are placed into the same cache group.
+	 * Mark it as a multi event group, so that we update ->count
+	 * for every event rather than just the group leader later.
 	 */
-	if (a->hw.target == b->hw.target)
+	if (a->hw.target == b->hw.target) {
+		b->hw.is_group_event = true;
 		return true;
+	}
 
 	/*
 	 * Are we an inherited event?
@@ -279,7 +314,7 @@ static bool __match_event(struct perf_event *a, struct perf_event *b)
 static inline struct perf_cgroup *event_to_cgroup(struct perf_event *event)
 {
 	if (event->attach_state & PERF_ATTACH_TASK)
-		return perf_cgroup_from_task(event->hw.target);
+		return perf_cgroup_from_task(event->hw.target, event->ctx);
 
 	return event->cgrp;
 }
@@ -372,7 +407,7 @@ static bool __conflict_event(struct perf_event *a, struct perf_event *b)
 }
 
 struct rmid_read {
-	unsigned int rmid;
+	u32 rmid;
 	atomic64_t value;
 };
 
@@ -381,12 +416,11 @@ static void __intel_cqm_event_count(void *info);
 /*
  * Exchange the RMID of a group of events.
  */
-static unsigned int
-intel_cqm_xchg_rmid(struct perf_event *group, unsigned int rmid)
+static u32 intel_cqm_xchg_rmid(struct perf_event *group, u32 rmid)
 {
 	struct perf_event *event;
-	unsigned int old_rmid = group->hw.cqm_rmid;
 	struct list_head *head = &group->hw.cqm_group_entry;
+	u32 old_rmid = group->hw.cqm_rmid;
 
 	lockdep_assert_held(&cache_mutex);
 
@@ -451,7 +485,7 @@ static void intel_cqm_stable(void *arg)
  * If we have group events waiting for an RMID that don't conflict with
  * events already running, assign @rmid.
  */
-static bool intel_cqm_sched_in_event(unsigned int rmid)
+static bool intel_cqm_sched_in_event(u32 rmid)
 {
 	struct perf_event *leader, *event;
 
@@ -598,7 +632,7 @@ static bool intel_cqm_rmid_stabilize(unsigned int *available)
 static void __intel_cqm_pick_and_rotate(struct perf_event *next)
 {
 	struct perf_event *rotor;
-	unsigned int rmid;
+	u32 rmid;
 
 	lockdep_assert_held(&cache_mutex);
 
@@ -626,7 +660,7 @@ static void __intel_cqm_pick_and_rotate(struct perf_event *next)
 static void intel_cqm_sched_out_conflicting_events(struct perf_event *event)
 {
 	struct perf_event *group, *g;
-	unsigned int rmid;
+	u32 rmid;
 
 	lockdep_assert_held(&cache_mutex);
 
@@ -828,9 +862,10 @@ static void intel_cqm_setup_event(struct perf_event *event,
 				  struct perf_event **group)
 {
 	struct perf_event *iter;
-	unsigned int rmid;
 	bool conflict = false;
+	u32 rmid;
 
+	event->hw.is_group_event = false;
 	list_for_each_entry(iter, &cache_groups, hw.cqm_groups_entry) {
 		rmid = iter->hw.cqm_rmid;
 
@@ -860,7 +895,7 @@ static void intel_cqm_setup_event(struct perf_event *event,
 static void intel_cqm_event_read(struct perf_event *event)
 {
 	unsigned long flags;
-	unsigned int rmid;
+	u32 rmid;
 	u64 val;
 
 	/*
@@ -922,7 +957,9 @@ static u64 intel_cqm_event_count(struct perf_event *event)
 		return __perf_event_count(event);
 
 	/*
-	 * Only the group leader gets to report values. This stops us
+	 * Only the group leader gets to report values except in case of
+	 * multiple events in the same group, we still need to read the
+	 * other events.This stops us
 	 * reporting duplicate values to userspace, and gives us a clear
 	 * rule for which task gets to report the values.
 	 *
@@ -930,8 +967,16 @@ static u64 intel_cqm_event_count(struct perf_event *event)
 	 * specific packages - we forfeit that ability when we create
 	 * task events.
 	 */
-	if (!cqm_group_leader(event))
+	if (!cqm_group_leader(event) && !event->hw.is_group_event)
 		return 0;
+
+	/*
+	 * Getting up-to-date values requires an SMP IPI which is not
+	 * possible if we're being called in interrupt context. Return
+	 * the cached values instead.
+	 */
+	if (unlikely(in_interrupt()))
+		goto out;
 
 	/*
 	 * Notice that we don't perform the reading of an RMID
@@ -961,55 +1006,48 @@ out:
 
 static void intel_cqm_event_start(struct perf_event *event, int mode)
 {
-	struct intel_cqm_state *state = this_cpu_ptr(&cqm_state);
-	unsigned int rmid = event->hw.cqm_rmid;
-	unsigned long flags;
+	struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
+	u32 rmid = event->hw.cqm_rmid;
 
 	if (!(event->hw.cqm_state & PERF_HES_STOPPED))
 		return;
 
 	event->hw.cqm_state &= ~PERF_HES_STOPPED;
 
-	raw_spin_lock_irqsave(&state->lock, flags);
-
-	if (state->cnt++)
-		WARN_ON_ONCE(state->rmid != rmid);
-	else
+	if (state->rmid_usecnt++) {
+		if (!WARN_ON_ONCE(state->rmid != rmid))
+			return;
+	} else {
 		WARN_ON_ONCE(state->rmid);
+	}
 
 	state->rmid = rmid;
-	wrmsrl(MSR_IA32_PQR_ASSOC, state->rmid);
-
-	raw_spin_unlock_irqrestore(&state->lock, flags);
+	wrmsr(MSR_IA32_PQR_ASSOC, rmid, state->closid);
 }
 
 static void intel_cqm_event_stop(struct perf_event *event, int mode)
 {
-	struct intel_cqm_state *state = this_cpu_ptr(&cqm_state);
-	unsigned long flags;
+	struct intel_pqr_state *state = this_cpu_ptr(&pqr_state);
 
 	if (event->hw.cqm_state & PERF_HES_STOPPED)
 		return;
 
 	event->hw.cqm_state |= PERF_HES_STOPPED;
 
-	raw_spin_lock_irqsave(&state->lock, flags);
 	intel_cqm_event_read(event);
 
-	if (!--state->cnt) {
+	if (!--state->rmid_usecnt) {
 		state->rmid = 0;
-		wrmsrl(MSR_IA32_PQR_ASSOC, 0);
+		wrmsr(MSR_IA32_PQR_ASSOC, 0, state->closid);
 	} else {
 		WARN_ON_ONCE(!state->rmid);
 	}
-
-	raw_spin_unlock_irqrestore(&state->lock, flags);
 }
 
 static int intel_cqm_event_add(struct perf_event *event, int mode)
 {
 	unsigned long flags;
-	unsigned int rmid;
+	u32 rmid;
 
 	raw_spin_lock_irqsave(&cache_lock, flags);
 
@@ -1022,11 +1060,6 @@ static int intel_cqm_event_add(struct perf_event *event, int mode)
 	raw_spin_unlock_irqrestore(&cache_lock, flags);
 
 	return 0;
-}
-
-static void intel_cqm_event_del(struct perf_event *event, int mode)
-{
-	intel_cqm_event_stop(event, mode);
 }
 
 static void intel_cqm_event_destroy(struct perf_event *event)
@@ -1057,7 +1090,7 @@ static void intel_cqm_event_destroy(struct perf_event *event)
 			list_replace(&event->hw.cqm_groups_entry,
 				     &group_other->hw.cqm_groups_entry);
 		} else {
-			unsigned int rmid = event->hw.cqm_rmid;
+			u32 rmid = event->hw.cqm_rmid;
 
 			if (__rmid_valid(rmid))
 				__put_rmid(rmid);
@@ -1221,7 +1254,7 @@ static struct pmu intel_cqm_pmu = {
 	.task_ctx_nr	     = perf_sw_context,
 	.event_init	     = intel_cqm_event_init,
 	.add		     = intel_cqm_event_add,
-	.del		     = intel_cqm_event_del,
+	.del		     = intel_cqm_event_stop,
 	.start		     = intel_cqm_event_start,
 	.stop		     = intel_cqm_event_stop,
 	.read		     = intel_cqm_event_read,
@@ -1241,14 +1274,14 @@ static inline void cqm_pick_event_reader(int cpu)
 	cpumask_set_cpu(cpu, &cqm_cpumask);
 }
 
-static void intel_cqm_cpu_prepare(unsigned int cpu)
+static void intel_cqm_cpu_starting(unsigned int cpu)
 {
-	struct intel_cqm_state *state = &per_cpu(cqm_state, cpu);
+	struct intel_pqr_state *state = &per_cpu(pqr_state, cpu);
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 
-	raw_spin_lock_init(&state->lock);
 	state->rmid = 0;
-	state->cnt  = 0;
+	state->closid = 0;
+	state->rmid_usecnt = 0;
 
 	WARN_ON(c->x86_cache_max_rmid != cqm_max_rmid);
 	WARN_ON(c->x86_cache_occ_scale != cqm_l3_scale);
@@ -1282,13 +1315,11 @@ static int intel_cqm_cpu_notifier(struct notifier_block *nb,
 	unsigned int cpu  = (unsigned long)hcpu;
 
 	switch (action & ~CPU_TASKS_FROZEN) {
-	case CPU_UP_PREPARE:
-		intel_cqm_cpu_prepare(cpu);
-		break;
 	case CPU_DOWN_PREPARE:
 		intel_cqm_cpu_exit(cpu);
 		break;
 	case CPU_STARTING:
+		intel_cqm_cpu_starting(cpu);
 		cqm_pick_event_reader(cpu);
 		break;
 	}
@@ -1303,7 +1334,7 @@ static const struct x86_cpu_id intel_cqm_match[] = {
 
 static int __init intel_cqm_init(void)
 {
-	char *str, scale[20];
+	char *str = NULL, scale[20];
 	int i, cpu, ret;
 
 	if (!x86_match_cpu(intel_cqm_match))
@@ -1359,20 +1390,29 @@ static int __init intel_cqm_init(void)
 		goto out;
 
 	for_each_online_cpu(i) {
-		intel_cqm_cpu_prepare(i);
+		intel_cqm_cpu_starting(i);
 		cqm_pick_event_reader(i);
 	}
 
-	__perf_cpu_notifier(intel_cqm_cpu_notifier);
-
 	ret = perf_pmu_register(&intel_cqm_pmu, "intel_cqm", -1);
-	if (ret)
+	if (ret) {
 		pr_err("Intel CQM perf registration failed: %d\n", ret);
-	else
-		pr_info("Intel CQM monitoring enabled\n");
+		goto out;
+	}
 
+	pr_info("Intel CQM monitoring enabled\n");
+
+	/*
+	 * Register the hot cpu notifier once we are sure cqm
+	 * is enabled to avoid notifier leak.
+	 */
+	__perf_cpu_notifier(intel_cqm_cpu_notifier);
 out:
 	cpu_notifier_register_done();
+	if (ret) {
+		kfree(str);
+		cqm_cleanup();
+	}
 
 	return ret;
 }

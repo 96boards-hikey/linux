@@ -6,6 +6,11 @@
 #include "spk_priv.h"
 #include "serialio.h"
 
+#include <linux/serial_core.h>
+/* WARNING:  Do not change this to <linux/serial.h> without testing that
+ * SERIAL_PORT_DFNS does get defined to the appropriate value. */
+#include <asm/serial.h>
+
 #ifndef SERIAL_PORT_DFNS
 #define SERIAL_PORT_DFNS
 #endif
@@ -23,8 +28,14 @@ const struct old_serial_port *spk_serial_init(int index)
 	int baud = 9600, quot = 0;
 	unsigned int cval = 0;
 	int cflag = CREAD | HUPCL | CLOCAL | B9600 | CS8;
-	const struct old_serial_port *ser = rs_table + index;
+	const struct old_serial_port *ser;
 	int err;
+
+	if (index >= ARRAY_SIZE(rs_table)) {
+		pr_info("no port info for ttyS%d\n", index);
+		return NULL;
+	}
+	ser = rs_table + index;
 
 	/*	Divisor, bytesize and parity */
 	quot = ser->baud_base / baud;
@@ -51,7 +62,8 @@ const struct old_serial_port *spk_serial_init(int index)
 	}
 
 	/*	Disable UART interrupts, set DTR and RTS high
-	 *	and set speed. */
+	 *	and set speed.
+	 */
 	outb(cval | UART_LCR_DLAB, ser->port + UART_LCR);	/* set DLAB */
 	outb(quot & 0xff, ser->port + UART_DLL);	/* LS of divisor */
 	outb(quot >> 8, ser->port + UART_DLM);		/* MS of divisor */
@@ -100,7 +112,7 @@ static void start_serial_interrupt(int irq)
 {
 	int rv;
 
-	if (synth->read_buff_add == NULL)
+	if (!synth->read_buff_add)
 		return;
 
 	rv = request_irq(irq, synth_readbuf_handler, IRQF_SHARED,
@@ -126,7 +138,7 @@ void spk_stop_serial_interrupt(void)
 	if (speakup_info.port_tts == 0)
 		return;
 
-	if (synth->read_buff_add == NULL)
+	if (!synth->read_buff_add)
 		return;
 
 	/* Turn off interrupts */
@@ -145,7 +157,8 @@ int spk_wait_for_xmitr(void)
 		synth->alive = 0;
 		/* No synth any more, so nobody will restart TTYs, and we thus
 		 * need to do it ourselves.  Now that there is no synth we can
-		 * let application flood anyway */
+		 * let application flood anyway
+		 */
 		speakup_start_ttys();
 		timeouts = 0;
 		return 0;
@@ -163,7 +176,8 @@ int spk_wait_for_xmitr(void)
 		/* CTS */
 		if (--tmout == 0) {
 			/* pr_warn("%s: timed out (cts)\n",
-			 * synth->long_name); */
+			 * synth->long_name);
+			 */
 			timeouts++;
 			return 0;
 		}
@@ -217,4 +231,3 @@ void spk_serial_release(void)
 	speakup_info.port_tts = 0;
 }
 EXPORT_SYMBOL_GPL(spk_serial_release);
-

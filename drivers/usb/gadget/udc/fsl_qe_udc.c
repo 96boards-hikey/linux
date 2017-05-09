@@ -1878,11 +1878,8 @@ static int qe_get_frame(struct usb_gadget *gadget)
 
 	tmp = in_be16(&udc->usb_param->frame_n);
 	if (tmp & 0x8000)
-		tmp = tmp & 0x07ff;
-	else
-		tmp = -EINVAL;
-
-	return (int)tmp;
+		return tmp & 0x07ff;
+	return -EINVAL;
 }
 
 static int fsl_qe_start(struct usb_gadget *gadget,
@@ -2053,7 +2050,7 @@ static void setup_received_handle(struct qe_udc *udc,
 			struct qe_ep *ep;
 
 			if (wValue != 0 || wLength != 0
-				|| pipe > USB_MAX_ENDPOINTS)
+				|| pipe >= USB_MAX_ENDPOINTS)
 				break;
 			ep = &udc->eps[pipe];
 
@@ -2416,6 +2413,17 @@ static int qe_ep_config(struct qe_udc *udc, unsigned char pipe_num)
 	ep->udc = udc;
 	strcpy(ep->name, ep_name[pipe_num]);
 	ep->ep.name = ep_name[pipe_num];
+
+	if (pipe_num == 0) {
+		ep->ep.caps.type_control = true;
+	} else {
+		ep->ep.caps.type_iso = true;
+		ep->ep.caps.type_bulk = true;
+		ep->ep.caps.type_int = true;
+	}
+
+	ep->ep.caps.dir_in = true;
+	ep->ep.caps.dir_out = true;
 
 	ep->ep.ops = &qe_ep_ops;
 	ep->stopped = 1;

@@ -1,0 +1,9 @@
+config HISI_FB_KIRIN960
+	tristate "HISI FB KIRIN960 Framebuffer support"
+	depends on FB
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select REGMAP
+	help
+	  This framebuffer driver supports KIRIN960 FB.

@@ -1,4 +1,8 @@
 
+# We are fully aware of the dangers of __builtin_return_address()
+FRAME_CFLAGS := $(call cc-disable-warning,frame-address)
+KBUILD_CFLAGS += $(FRAME_CFLAGS)
+
 # Do not instrument the tracer itself:
 
 ifdef CONFIG_FUNCTION_TRACER
@@ -64,6 +68,7 @@ obj-$(CONFIG_KGDB_KDB) += trace_kdb.o
 endif
 obj-$(CONFIG_PROBE_EVENTS) += trace_probe.o
 obj-$(CONFIG_UPROBE_EVENT) += trace_uprobe.o
+obj-$(CONFIG_GPU_TRACEPOINTS) += gpu-traces.o
 
 obj-$(CONFIG_TRACEPOINT_BENCHMARK) += trace_benchmark.o
 
