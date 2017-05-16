@@ -24,10 +24,13 @@
 #include <linux/io.h>
 #include <linux/kfifo.h>
 #include <linux/mailbox_controller.h>
+#include <linux/mailbox_client.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+
+#include "mailbox.h"
 
 #define MBOX_CHAN_MAX			32
 
@@ -63,6 +66,8 @@
 #define MBOX_STATE_IN			(1 << 6)
 #define MBOX_STATE_ACK			(1 << 7)
 
+#define MBOX_DESTINATION_STATUS		(1 << 6)
+
 struct hi3660_mbox_chan {
 
 	/*
@@ -74,6 +79,10 @@ struct hi3660_mbox_chan {
 	 */
 	unsigned int dir, dst_irq, ack_irq;
 	unsigned int slot;
+
+	unsigned int *buf;
+
+	unsigned int irq_mode;
 
 	struct hi3660_mbox *parent;
 };
@@ -381,8 +390,13 @@ static bool hi3660_mbox_last_tx_done(struct mbox_chan *chan)
 static int _mdev_hw_send(struct hi3660_mbox_chan *mchan, u32 *msg, u32 len)
 {
 	struct hi3660_mbox *mbox = mchan->parent;
-	int i, ack_mode = MBOX_AUTO_ACK;
+	int i, ack_mode;
 	unsigned int temp;
+
+	if (mchan->irq_mode)
+		ack_mode = MBOX_MANUAL_ACK;
+	else
+		ack_mode = MBOX_AUTO_ACK;
 
 	/* interrupts unmask */
 	__ipc_cpu_imask_all(mbox->base, mchan->slot);
@@ -408,6 +422,8 @@ static int _mdev_hw_send(struct hi3660_mbox_chan *mchan, u32 *msg, u32 len)
 	/* write data */
 	for (i = 0; i < len; i++)
 		__ipc_write(mbox->base, msg[i], mchan->slot, i);
+
+	mchan->buf = msg;
 
 	/* enable sending */
 	__ipc_send(mbox->base, BIT(mchan->ack_irq), mchan->slot);
@@ -442,8 +458,73 @@ out:
 	return err;
 }
 
+static irqreturn_t hi3660_mbox_interrupt(int irq, void *p)
+{
+	struct hi3660_mbox *mbox = p;
+	struct hi3660_mbox_chan *mchan;
+	struct mbox_chan *chan;
+	unsigned int state, intr_bit, i;
+	unsigned int status, imask, todo;
+	u32 msg[MBOX_MSG_LEN];
+
+	state = __ipc_mbox_istatus(mbox->base, 0);
+
+	if (!state) {
+		dev_warn(mbox->dev, "%s: spurious interrupt\n",
+			 __func__);
+		return IRQ_HANDLED;
+	}
+
+	while (state) {
+		intr_bit = __ffs(state);
+		state &= (state - 1);
+
+		chan = mbox->irq_map_chan[intr_bit];
+		if (!chan) {
+			dev_warn(mbox->dev, "%s: unexpected irq vector %d\n",
+				 __func__, intr_bit);
+			continue;
+		}
+
+		mchan = chan->con_priv;
+
+		for (i = 0; i < MBOX_MSG_LEN; i++)
+			mchan->buf[i] = __ipc_read(mbox->base, mchan->slot, i);
+
+		if (mchan->dir == MBOX_TX)
+			mbox_chan_txdone(chan, 0);
+		else
+			mbox_chan_received_data(chan, (void *)msg);
+
+		for (i = 0; i < MBOX_MSG_LEN; i++)
+			__ipc_write(mbox->base, 0x0, mchan->slot, i);
+
+		imask = __ipc_cpu_imask_get(mbox->base, mchan->slot);
+	        todo = ((1<<0) | (1<<1)) & (~imask);
+		__ipc_cpu_iclr(mbox->base, todo, mchan->slot);
+
+
+		status = __ipc_status(mbox->base, mchan->slot);
+		if ((MBOX_DESTINATION_STATUS & status) &&
+		    (!(AUTOMATIC_ACK_CONFIG & status)))
+			__ipc_send(mbox->base, todo, mchan->slot);
+
+		/*release the channel */
+		_mdev_release(mchan);
+	}
+
+	return IRQ_HANDLED;
+}
+
 static int hi3660_mbox_startup(struct mbox_chan *chan)
 {
+	struct hi3660_mbox_chan *mchan;
+
+	mchan = chan->con_priv;
+
+	if (mchan->irq_mode)
+		chan->txdone_method = TXDONE_BY_IRQ;
+
 	return 0;
 }
 
@@ -470,17 +551,14 @@ static struct mbox_chan *hi3660_mbox_xlate(struct mbox_controller *controller,
 	unsigned int ack_irq = spec->args[2];
 
 	/* Bounds checking */
-	if (i >= mbox->chan_num || dst_irq >= mbox->chan_num ||
-	    ack_irq >= mbox->chan_num) {
-		dev_err(mbox->dev,
-			"Invalid channel idx %d dst_irq %d ack_irq %d\n",
-			i, dst_irq, ack_irq);
+	if (i >= mbox->chan_num) {
+		dev_err(mbox->dev, "Invalid channel idx %d\n", i);
 		return ERR_PTR(-EINVAL);
 	}
 
 	/* Is requested channel free? */
 	chan = &mbox->chan[i];
-	if (mbox->irq_map_chan[ack_irq] == (void *)chan) {
+	if (mbox->irq_map_chan[i] == (void *)chan) {
 		dev_err(mbox->dev, "Channel in use\n");
 		return ERR_PTR(-EBUSY);
 	}
@@ -489,7 +567,7 @@ static struct mbox_chan *hi3660_mbox_xlate(struct mbox_controller *controller,
 	mchan->dst_irq = dst_irq;
 	mchan->ack_irq = ack_irq;
 
-	mbox->irq_map_chan[ack_irq] = (void *)chan;
+	mbox->irq_map_chan[i] = (void *)chan;
 	return chan;
 }
 
@@ -522,6 +600,10 @@ static int hi3660_mbox_probe(struct platform_device *pdev)
 	if (!mbox->chan)
 		return -ENOMEM;
 
+	mbox->irq = platform_get_irq(pdev, 0);
+	if (mbox->irq < 0)
+		return mbox->irq;
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	mbox->base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(mbox->base)) {
@@ -529,11 +611,21 @@ static int hi3660_mbox_probe(struct platform_device *pdev)
 		return PTR_ERR(mbox->base);
 	}
 
+	err = devm_request_irq(dev, mbox->irq, hi3660_mbox_interrupt, 0,
+			dev_name(dev), mbox);
+	if (err) {
+		dev_err(dev, "Failed to register a mailbox IRQ handler: %d\n",
+			err);
+		return -ENODEV;
+	}
+
 	mbox->controller.dev = dev;
 	mbox->controller.chans = &mbox->chan[0];
 	mbox->controller.num_chans = mbox->chan_num;
 	mbox->controller.ops = &hi3660_mbox_ops;
 	mbox->controller.of_xlate = hi3660_mbox_xlate;
+	mbox->controller.txdone_poll = true;
+	mbox->controller.txpoll_period = 5;
 
 	for (i = 0; i < mbox->chan_num; i++) {
 		mbox->chan[i].con_priv = &mbox->mchan[i];
@@ -541,10 +633,14 @@ static int hi3660_mbox_probe(struct platform_device *pdev)
 
 		mbox->mchan[i].parent = mbox;
 		mbox->mchan[i].slot   = i;
-	}
 
-	mbox->controller.txdone_poll = true;
-	mbox->controller.txpoll_period = 5;
+		if (i == 28)
+			/* channel 28 is used for thermal with irq mode */
+			mbox->mchan[i].irq_mode = 1;
+		else
+			/* other channels use automatic mode */
+			mbox->mchan[i].irq_mode = 0;
+	}
 
 	err = mbox_controller_register(&mbox->controller);
 	if (err) {

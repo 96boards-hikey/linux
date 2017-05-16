@@ -64,7 +64,6 @@ struct hi3660_stub_clk {
 	struct clk_hw hw;
 
 	u32 set_rate_cmd;
-	u32 get_rate_cmd;
 
 	u32 *table;
 	u32 table_len;
@@ -75,80 +74,24 @@ struct hi3660_stub_clk {
 	struct hi3660_stub_clk_chan *chan;
 };
 
-/*
- * Below code is reserved to enable DDR frequency change,
- * looks the below commented code is not necessary and it's
- * not clean for upstreaming to mainline kernel.
- */
-#if 0
+static void __iomem *freq_reg;
 
-#define FREQ_INDEX_MASK	   0xF
-static unsigned int hi3660_stub_clk_get_freq_idx(struct hi3660_stub_clk *stub_clk)
+static unsigned long hi3660_stub_clk_recalc_rate(
+		struct clk_hw *hw, unsigned long parent_rate)
 {
-	unsigned int sys_bak_reg;
-
-	if (!stub_clk->reg)
-		return 0;
-
-	sys_bak_reg = readl(stub_clk->reg);
-
-	/*sysctrl SCBAKDATA4
-		bit 0-3	      LITTLE Cluster
-		bit 4-7	      BIG Cluster
-		bit 8-11    DDR
-		bit 12-15  GPU*/
-	switch (stub_clk->id) {
-	case 0:
-		break;
-	case 1:
-		sys_bak_reg >>= 4;
-		break;
-	case 2:
-		sys_bak_reg >>= 12;
-		break;
-	case 3:
-		sys_bak_reg >>= 8;
-		break;
-	default:
-		return 0;
-	}
-
-	sys_bak_reg &= FREQ_INDEX_MASK;
-
-	if (sys_bak_reg >= stub_clk->table_length)
-		sys_bak_reg = 0;
-
-	return sys_bak_reg;
-}
-#endif
-
-static unsigned long hi3660_stub_clk_recalc_rate(struct clk_hw *hw,
-						 unsigned long parent_rate)
-{
-	struct hi3660_stub_clk *stub_clk = container_of(hw, struct hi3660_stub_clk, hw);
+	struct hi3660_stub_clk *stub_clk =
+		container_of(hw, struct hi3660_stub_clk, hw);
 	u32 rate;
 
-#if 0
-	printk("%s: enter\n", __func__);
+	rate = readl(freq_reg + 0x570 + (stub_clk->id << 2)) * 1000000;
 
-	switch (stub_clk->id) {
-	/* DDR get freq */
-	case 3:
-		freq_index = hi3660_stub_clk_get_freq_idx(stub_clk);
-		rate = stub_clk->freq[freq_index]*1000;
-		pr_debug("[%s]3 idx=%d rate=%d\n", __func__, freq_index, rate);
-		break;
-	/* DDR set min */
-	case 4:
-	default:
-		rate = stub_clk->rate;
-	}
-#endif
-	if (!stub_clk->rate)
-		stub_clk->rate = stub_clk->table[0];
+	if (rate)
+		stub_clk->rate = rate;
+	else
+		/* workaround if before initialization */
+		stub_clk->rate = stub_clk->table[0] * 1000;
 
-	rate = stub_clk->rate;
-	return rate;
+	return stub_clk->rate;
 }
 
 static long hi3660_stub_clk_round_rate(struct clk_hw *hw, unsigned long rate,
@@ -190,7 +133,7 @@ static struct clk_ops hi3660_stub_clk_ops = {
 
 static int hi3660_register_stub_clk(struct platform_device *pdev,
 		int id, char *clk_name,
-		u32 set_rate_cmd, u32 get_rate_cmd,
+		u32 set_rate_cmd,
 		struct hi3660_stub_clk_chan *chan,
 		u32 *table, u32 table_len,
 		struct clk_onecell_data *data)
@@ -208,7 +151,6 @@ static int hi3660_register_stub_clk(struct platform_device *pdev,
 	stub_clk->dev = dev;
 	stub_clk->id = id;
 	stub_clk->set_rate_cmd = set_rate_cmd;
-	stub_clk->get_rate_cmd = get_rate_cmd;
 	stub_clk->chan = chan;
 	stub_clk->table = table;
 	stub_clk->table_len = table_len;
@@ -249,6 +191,7 @@ static int hi3660_stub_clk_probe(struct platform_device *pdev)
 	struct hi3660_stub_clk_chan *chan;
 	struct device_node *np = pdev->dev.of_node;
 	struct clk_onecell_data	*data;
+	struct resource *res;
 	struct clk **clk_table;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
@@ -287,19 +230,25 @@ static int hi3660_stub_clk_probe(struct platform_device *pdev)
 		return PTR_ERR(chan->mbox);
 	}
 
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	freq_reg = devm_ioremap(dev, res->start, resource_size(res));
+	if (IS_ERR(freq_reg)) {
+		dev_err(dev, "failed get shared memory\n");
+		return -ENOMEM;
+	}
+
 	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_CLUSTER0,
-			"cpu-cluster.0", 0x0001030a, 0x0001020a, chan,
+			"cpu-cluster.0", 0x0001030a, chan,
 			ca53_freq, ARRAY_SIZE(ca53_freq), data);
 	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_CLUSTER1,
-			"cpu-cluster.1", 0x0002030a, 0x0002020a, chan,
+			"cpu-cluster.1", 0x0002030a, chan,
 			ca72_freq, ARRAY_SIZE(ca72_freq), data);
 	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_GPU,
-			"clk-g3d", 0x0003030a, 0x0003020a, chan,
+			"clk-g3d", 0x0003030a, chan,
 			gpu_freq, ARRAY_SIZE(gpu_freq), data);
 	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_DDR,
-			"clk-ddrc", 0x0004030a, 0x0004020a, chan,
+			"clk-ddrc", 0x0004030a, chan,
 			ddr_freq, ARRAY_SIZE(ddr_freq), data);
-
 	return 0;
 }
 
