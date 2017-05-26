@@ -496,6 +496,37 @@ CONFIG_MALI_PLATFORM_HISILICON=y
 # CONFIG_MALI_TRACE_TIMELINE is not set
 # CONFIG_MALI_SYSTEM_TRACE is not set
 # CONFIG_MALI_PM_DEMAND is not set
+
+#
+#HiSilicon Platform
+#
+CONFIG_HISILICON_PLATFORM=y
+
+#
+# Hifimisc driver serve HIFI dsp
+#
+CONFIG_HIFI_DSP_ONE_TRACK=y
+
+
+#
+# Hifi mailbox driver
+#
+CONFIG_HIFI_MAILBOX=y
+
+#
+# Hifi mailbox driver
+#
+CONFIG_HIFI_IPC=y
+CONFIG_HIFI_IPC_3660=y
+# CONFIG_HIFI_IPC_3650 is not set
+# CONFIG_HIFI_IPC_6250 is not set
+CONFIG_HISILICON_PLATFORM_MAILBOX=y
+CONFIG_HISI_MAILBOX=y
+#
+# hisi kernel API about remote processor communication
+#
+CONFIG_HISI_RPROC=y
+
 CONFIG_REPORT_VSYNC=y
 CONFIG_MALI_IDLE_AUTO_CLK_DIV=y
 # CONFIG_MALI_DMA_FENCE is not set

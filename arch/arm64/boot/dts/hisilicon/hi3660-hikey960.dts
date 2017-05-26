@@ -12,6 +12,7 @@
 #include "hikey960-pinctrl.dtsi"
 #include "hi3660-gpu.dtsi"
 #include "hi3660-drm.dtsi"
+#include "hi3660-ipc.dtsi"
 
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
@@ -368,6 +369,16 @@
 			default-state = "off";
 		};
 	};
+    pclk: apb_pclk {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <20000000>;
+        clock-output-names = "apb_pclk";
+    };
+    hifidsp{
+        status = "ok";
+        compatible = "hisilicon,k3hifidsp";
+    };
 };
 
 &uart4 {
