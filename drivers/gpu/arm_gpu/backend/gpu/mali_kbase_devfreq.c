@@ -47,7 +47,7 @@ static int
 kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 {
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
-	struct opp *opp;
+	struct dev_pm_opp *opp;
 	unsigned long freq = 0;
 	unsigned long voltage;
 	int err;
@@ -66,6 +66,7 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	/*
 	 * Only update if there is a change of frequency
 	 */
+	kbdev->current_freq = clk_get_rate(kbdev->clock);
 	if (kbdev->current_freq == freq) {
 		*target_freq = freq;
 		return 0;
@@ -116,6 +117,7 @@ kbase_devfreq_cur_freq(struct device *dev, unsigned long *freq)
 {
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
 
+	kbdev->current_freq = clk_get_rate(kbdev->clock);
 	*freq = kbdev->current_freq;
 
 	return 0;
@@ -152,10 +154,10 @@ static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev,
 	int count;
 	int i = 0;
 	unsigned long freq;
-	struct opp *opp;
+	struct dev_pm_opp *opp;
 
 	rcu_read_lock();
-	count = opp_get_opp_count(kbdev->dev);
+	count = dev_pm_opp_get_opp_count(kbdev->dev);
 	if (count < 0) {
 		rcu_read_unlock();
 		return count;
@@ -169,7 +171,7 @@ static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev,
 
 	rcu_read_lock();
 	for (i = 0, freq = ULONG_MAX; i < count; i++, freq--) {
-		opp = opp_find_freq_floor(kbdev->dev, &freq);
+		opp = dev_pm_opp_find_freq_floor(kbdev->dev, &freq);
 		if (IS_ERR(opp))
 			break;
 
