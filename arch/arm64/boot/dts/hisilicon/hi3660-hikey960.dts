@@ -12,6 +12,7 @@
 #include "hikey960-pinctrl.dtsi"
 #include "hi3660-gpu.dtsi"
 #include "hi3660-drm.dtsi"
+#include "hi3660-ipc.dtsi"
 
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
@@ -64,13 +65,24 @@
 			reg = <0x0 0x20A00000 0x0 0x100000>;
 		};
 
+
+		hifi-base {
+			reg = <0x0 0x89200000 0x0 0x980000>;
+			no-map;
+		};
+
+
 		lpmx-core {
-			reg = <0x0 0x89280000 0x0 0x100000>;
+			reg = <0x0 0x89B80000 0x0 0x100000>;
 			no-map;
 		};
 
 		lpmcu {
-			reg = <0x0 0x89380000 0x0 0x40000>;
+			reg = <0x0 0x89C80000 0x0 0x40000>;
+			no-map;
+		};
+		hifi-data {
+			reg = <0x0 0x8B300000 0x0 0x380000>;
 			no-map;
 		};
 	};
@@ -368,6 +380,16 @@
 			default-state = "off";
 		};
 	};
+    pclk: apb_pclk {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <20000000>;
+        clock-output-names = "apb_pclk";
+    };
+    hifidsp{
+        status = "ok";
+        compatible = "hisilicon,k3hifidsp";
+    };
 };
 
 &uart4 {

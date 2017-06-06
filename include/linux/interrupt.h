@@ -62,6 +62,7 @@
  *                wakeup devices users need to implement wakeup detection in
  *                their interrupt handlers.
  */
+#define IRQF_DISABLED		0x00000020
 #define IRQF_SHARED		0x00000080
 #define IRQF_PROBE_SHARED	0x00000100
 #define __IRQF_TIMER		0x00000200
