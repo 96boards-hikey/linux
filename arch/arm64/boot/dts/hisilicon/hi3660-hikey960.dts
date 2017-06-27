@@ -14,6 +14,7 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "hi3660-drm.dtsi"
+#include "hi3660-ion.dtsi"
 
 / {
 	model = "HiKey960";
@@ -187,6 +188,16 @@
 		/* WLAN card specific delay */
 		startup-delay-us = <70000>;
 		enable-active-high;
+	};
+
+	smmu {
+		compatible = "hisi,hisi-smmu";
+		phy_pgd_base = <0x0 0x34A78000>;
+	};
+
+	smmu_lpae{
+		compatible = "hisi,hisi-smmu-lpae";
+		status = "ok";
 	};
 };
 
