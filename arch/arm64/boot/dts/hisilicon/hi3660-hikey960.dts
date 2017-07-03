@@ -221,6 +221,32 @@
 		compatible = "hisi,hisi-smmu-lpae";
 		status = "ok";
 	};
+
+	/* bluetooth - TI WL1837 */
+	kim {
+		compatible = "kim";
+		pinctrl-names = "default";
+		pinctrl-0 = <&uart4_pmx_func &i2s0_pmx_func
+			     &uart4_cfg_func &i2s0_cfg_func>;
+		/*
+		 * FIXME: The following is complete CRAP since
+		 * the vendor driver doesn't follow the gpio
+		 * binding. Passing in a magic Linux gpio number
+		 * here until we fix the vendor driver.
+		 */
+		/* BT_EN: GPIO_126_BT_EN */
+		nshutdown_gpio = <390>;
+		dev_name = "/dev/ttyAMA4";
+		flow_cntrl = <1>;
+		/* baud_rate = <3000000>; */
+		/* baud_rate = <230400>; ok */
+		baud_rate = <921600>;
+		/* baud_rate = <1500000>; nok */
+	};
+
+	btwilink {
+		compatible = "btwilink";
+	};
 };
 
 &i2c0 {
