@@ -1,0 +1,5 @@
+config SND_I2S_HISI_I2S
+	tristate "Hisilicon I2S controller"
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	help
+	  Hisilicon I2S

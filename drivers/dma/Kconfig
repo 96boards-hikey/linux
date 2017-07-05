@@ -285,6 +285,15 @@ config K3_DMA
 	  Support the DMA engine for Hisilicon K3 platform
 	  devices.
 
+config HISI_ASP_DMA
+	tristate "Hisilicon Kirin ASP DMA support"
+	depends on ARCH_HISI
+	select DMA_ENGINE
+	select DMA_VIRTUAL_CHANNELS
+	help
+	  Support the DMA engine for Hisilicon Kirin platform
+	  devices.
+
 config LPC18XX_DMAMUX
 	bool "NXP LPC18xx/43xx DMA MUX for PL080"
 	depends on ARCH_LPC18XX || COMPILE_TEST
