@@ -1,0 +1,40 @@
+# Hisilicon IOMMU support
+
+config HISI_IODOMAIN_API
+	bool
+
+config HISI_IOMMU
+	bool "Hisilicon IOMMU Support"
+	select IOMMU_API
+	select HISI_IODOMAIN_API
+	help
+	  Hisilicon IOMMU Support.
+
+config HISI_IOMMU_LPAE
+	bool "Hisilicon IOMMU LPAE Support"
+	select IOMMU_API
+	depends on HISI_IOMMU
+	help
+	  Hisilicon IOMMU Support.
+
+config HISI_IOMMU_LEGACY
+	bool "Hisilicon IOMMU SECOND LEVEL PAGE TABLE Support"
+	select IOMMU_API
+	depends on HISI_IOMMU && !HISI_IOMMU_LPAE
+	help
+	  Hisilicon IOMMU Support.
+
+config HISI_IOMMU_COMPACT
+	bool "Hisilicon IOMMU compact linux4.1"
+	help
+	  On linux4.1, IOMMU framework has some change point,
+	  you need compact it.If you build on linux4.1 and need
+	  hisilicon iommu,you should select this 'y'.
+	  Then, you should select this 'n'.
+
+config HISI_IOMMU_TEST
+	bool "Hisilicon IOMMU TEST Support"
+	depends on HISI_IOMMU_LPAE
+	select IOMMU_API
+	help
+	  Hisilicon IOMMU Support.
