@@ -3,9 +3,11 @@
  *
  * Copyright (c) 2013-2015 Hisilicon Limited.
  * Copyright (c) 2017 Linaro Limited.
+ * Copyright (c) 2017 Hisilicon Limited.
  *
  * Author: Kai Zhao <zhaokai1@hisilicon.com>
  * Author: Leo Yan <leo.yan@linaro.org>
+ * Author: Tao Wang <kevin.wangtao@hisilicon.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,30 +29,22 @@
 #include <linux/kernel.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
-#include <linux/clk/clk-conf.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
-#include <linux/spinlock.h>
 #include <linux/err.h>
-#include <linux/list.h>
 #include <linux/slab.h>
-#include <linux/of.h>
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/clkdev.h>
-#include <linux/clkdev.h>
 #include <linux/delay.h>
-#include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
-#include <linux/slab.h>
-#include <linux/clk.h>
 #include <linux/mailbox_client.h>
 #include <dt-bindings/clock/hi3660-clock.h>
 
-#include "clk.h"
+#define FREQ_DATA_OFFSET	0x70
+#define MHZ			1000000
 
 struct hi3660_stub_clk_chan {
 	struct mbox_client cl;
@@ -58,38 +52,51 @@ struct hi3660_stub_clk_chan {
 };
 
 struct hi3660_stub_clk {
-
-	u32 id;
+	unsigned int id;
 	struct device *dev;
 	struct clk_hw hw;
-
-	u32 set_rate_cmd;
-
-	u32 *table;
-	u32 table_len;
-
-	u32 rate;
+	const char *clk_name;
+	unsigned int set_rate_cmd;
 	unsigned int msg[8];
-
-	struct hi3660_stub_clk_chan *chan;
+	unsigned int rate;
 };
 
 static void __iomem *freq_reg;
+static struct hi3660_stub_clk_chan *chan;
+
+static struct hi3660_stub_clk hisi_stub_clk[HI3660_CLK_STUB_NUM] = {
+	[HI3660_CLK_STUB_CLUSTER0] = {
+		.id = HI3660_CLK_STUB_CLUSTER0,
+		.clk_name = "cpu-cluster.0",
+		.set_rate_cmd = 0x0001030A,
+	},
+	[HI3660_CLK_STUB_CLUSTER1] = {
+		.id = HI3660_CLK_STUB_CLUSTER1,
+		.clk_name = "cpu-cluster.1",
+		.set_rate_cmd = 0x0002030A,
+	},
+	[HI3660_CLK_STUB_GPU] = {
+		.id = HI3660_CLK_STUB_GPU,
+		.clk_name = "clk-g3d",
+		.set_rate_cmd = 0x0003030A,
+	},
+	[HI3660_CLK_STUB_DDR] = {
+		.id = HI3660_CLK_STUB_DDR,
+		.clk_name = "clk-ddrc",
+		.set_rate_cmd = 0x00040309,
+	},
+};
 
 static unsigned long hi3660_stub_clk_recalc_rate(
 		struct clk_hw *hw, unsigned long parent_rate)
 {
 	struct hi3660_stub_clk *stub_clk =
 		container_of(hw, struct hi3660_stub_clk, hw);
-	u32 rate;
 
-	rate = readl(freq_reg + 0x570 + (stub_clk->id << 2)) * 1000000;
+	if (stub_clk->id < HI3660_CLK_STUB_NUM)
+		stub_clk->rate = readl(freq_reg + (stub_clk->id << 2)) * MHZ;
 
-	if (rate)
-		stub_clk->rate = rate;
-	else
-		/* workaround if before initialization */
-		stub_clk->rate = stub_clk->table[0] * 1000;
+	pr_debug("get rate%d;%u\n", stub_clk->id, stub_clk->rate);
 
 	return stub_clk->rate;
 }
@@ -113,13 +120,16 @@ static int hi3660_stub_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 	struct hi3660_stub_clk *stub_clk =
 		container_of(hw, struct hi3660_stub_clk, hw);
 
-	stub_clk->msg[0] = stub_clk->set_rate_cmd;
-	stub_clk->msg[1] = rate / 1000000;
+	if (stub_clk->id < HI3660_CLK_STUB_NUM) {
+		stub_clk->msg[0] = stub_clk->set_rate_cmd;
+		stub_clk->msg[1] = rate / MHZ;
 
-	pr_debug("%s: set_rate_cmd[0] %x [1] %x\n", __func__,
-		stub_clk->msg[0], stub_clk->msg[1]);
+		pr_debug("%s: set_rate_cmd[0] %x [1] %x\n", __func__,
+				stub_clk->msg[0], stub_clk->msg[1]);
 
-	mbox_send_message(stub_clk->chan->mbox, stub_clk->msg);
+		mbox_send_message(chan->mbox, stub_clk->msg);
+	}
+
 	stub_clk->rate = rate;
 	return 0;
 }
@@ -131,68 +141,36 @@ static struct clk_ops hi3660_stub_clk_ops = {
 	.set_rate       = hi3660_stub_clk_set_rate,
 };
 
-static int hi3660_register_stub_clk(struct platform_device *pdev,
-		int id, char *clk_name,
-		u32 set_rate_cmd,
-		struct hi3660_stub_clk_chan *chan,
-		u32 *table, u32 table_len,
-		struct clk_onecell_data *data)
+static struct clk *hi3660_register_stub_clk(struct device *dev,
+		struct hi3660_stub_clk *stub_clk)
 {
-	struct device *dev = &pdev->dev;
-	struct clk_init_data init;
-	struct hi3660_stub_clk *stub_clk;
+	struct clk_init_data init = {};
 	struct clk *clk;
-
-	stub_clk = devm_kzalloc(dev, sizeof(*stub_clk), GFP_KERNEL);
-	if (!stub_clk)
-		return -ENOMEM;
 
 	stub_clk->hw.init = &init;
 	stub_clk->dev = dev;
-	stub_clk->id = id;
-	stub_clk->set_rate_cmd = set_rate_cmd;
-	stub_clk->chan = chan;
-	stub_clk->table = table;
-	stub_clk->table_len = table_len;
 
-	init.name = kstrdup(clk_name, GFP_KERNEL);
+	init.name = stub_clk->clk_name;
 	init.ops = &hi3660_stub_clk_ops;
 	init.num_parents = 0;
-	init.flags = 0;
+	init.flags = CLK_GET_RATE_NOCACHE;
 
 	clk = devm_clk_register(dev, &stub_clk->hw);
-	if (IS_ERR(clk))
-		return PTR_ERR(clk);
+	if (!IS_ERR(clk))
+		dev_dbg(dev, "Registered clock '%s'\n", init.name);
 
-	data->clks[id] = clk;
-	dev_dbg(dev, "Registered clock '%s'\n", init.name);
-	return 0;
+	return clk;
 }
-
-static u32 ca53_freq[] = {
-	533000, 999000, 1402000, 1709000, 1844000,
-};
-
-static u32 ca72_freq[] = {
-	903000, 1421000, 1805000, 2112000, 2362000, 2612000,
-};
-
-static u32 ddr_freq[] = {
-	400000, 685000, 1067000, 1245000, 1600000, 1866000,
-};
-
-static u32 gpu_freq[] = {
-	400000, 533000, 807000, 884000,
-};
 
 static int hi3660_stub_clk_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct hi3660_stub_clk_chan *chan;
 	struct device_node *np = pdev->dev.of_node;
 	struct clk_onecell_data	*data;
 	struct resource *res;
 	struct clk **clk_table;
+	struct clk *clk;
+	unsigned int idx;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data) {
@@ -208,7 +186,6 @@ static int hi3660_stub_clk_probe(struct platform_device *pdev)
 	}
 	data->clks = clk_table;
 	data->clk_num = HI3660_CLK_STUB_NUM;
-	of_clk_add_provider(np, of_clk_src_onecell_get, data);
 
 	chan = devm_kzalloc(dev, sizeof(*chan), GFP_KERNEL);
 	if (!chan) {
@@ -236,19 +213,17 @@ static int hi3660_stub_clk_probe(struct platform_device *pdev)
 		dev_err(dev, "failed get shared memory\n");
 		return -ENOMEM;
 	}
+	freq_reg += FREQ_DATA_OFFSET;
 
-	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_CLUSTER0,
-			"cpu-cluster.0", 0x0001030a, chan,
-			ca53_freq, ARRAY_SIZE(ca53_freq), data);
-	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_CLUSTER1,
-			"cpu-cluster.1", 0x0002030a, chan,
-			ca72_freq, ARRAY_SIZE(ca72_freq), data);
-	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_GPU,
-			"clk-g3d", 0x0003030a, chan,
-			gpu_freq, ARRAY_SIZE(gpu_freq), data);
-	hi3660_register_stub_clk(pdev, HI3660_CLK_STUB_DDR,
-			"clk-ddrc", 0x0004030a, chan,
-			ddr_freq, ARRAY_SIZE(ddr_freq), data);
+	for (idx = 0; idx < HI3660_CLK_STUB_NUM; idx++) {
+		clk = hi3660_register_stub_clk(dev, &hisi_stub_clk[idx]);
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
+
+		data->clks[idx] = clk;
+	}
+	of_clk_add_provider(np, of_clk_src_onecell_get, data);
+
 	return 0;
 }
 
