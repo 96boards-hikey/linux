@@ -39,6 +39,7 @@
 
 #include "hci_request.h"
 #include "hci_debugfs.h"
+#include "led.h"
 #include "smp.h"
 #include "leds.h"
 
@@ -3086,6 +3087,9 @@ int hci_register_dev(struct hci_dev *hdev)
 	if (hdev->rfkill && rfkill_blocked(hdev->rfkill))
 		hci_dev_set_flag(hdev, HCI_RFKILLED);
 
+	bluetooth_led_names(hdev);
+	bluetooth_led_init(hdev);
+
 	hci_dev_set_flag(hdev, HCI_SETUP);
 	hci_dev_set_flag(hdev, HCI_AUTO_OFF);
 
@@ -3155,6 +3159,8 @@ void hci_unregister_dev(struct hci_dev *hdev)
 	BUG_ON(!list_empty(&hdev->mgmt_pending));
 
 	hci_sock_dev_event(hdev, HCI_DEV_UNREG);
+
+	bluetooth_led_exit(hdev);
 
 	if (hdev->rfkill) {
 		rfkill_unregister(hdev->rfkill);
@@ -3248,6 +3254,8 @@ int hci_recv_frame(struct hci_dev *hdev, struct sk_buff *skb)
 
 	skb_queue_tail(&hdev->rx_q, skb);
 	queue_work(hdev->workqueue, &hdev->rx_work);
+
+	bluetooth_led_rx(hdev);
 
 	return 0;
 }
@@ -3348,6 +3356,8 @@ static void hci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		BT_ERR("%s sending frame failed (%d)", hdev->name, err);
 		kfree_skb(skb);
 	}
+
+	bluetooth_led_tx(hdev);
 }
 
 /* Send HCI command */
