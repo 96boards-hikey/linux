@@ -4,6 +4,7 @@
  * Copyright (c) 2017 Hisilicon Limited.
  * Copyright (c) 2017 Linaro Limited.
  *
+ * Author: Tao Wang <kevin.wangtao@hisilicon.com>
  * Author: Leo Yan <leo.yan@linaro.org>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -26,11 +27,16 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/thermal.h>
-#include <linux/mailbox_client.h>
 
 #include "thermal_core.h"
 
-#define HISI_MAX_SENSORS		4
+#define HW_MAX_SENSORS			4
+#define HISI_MAX_SENSORS		6
+#define SENSOR_MAX			4
+#define SENSOR_AVG			5
+
+#define ADC_MIN		116
+#define ADC_MAX		922
 
 /* hi3660 Thermal Sensor Dev Structure */
 struct hi3660_thermal_sensor {
@@ -38,39 +44,45 @@ struct hi3660_thermal_sensor {
 	struct thermal_zone_device *tzd;
 
 	uint32_t id;
-
-	unsigned int msg[8];
 };
 
 struct hi3660_thermal_data {
-	struct mutex thermal_lock;    /* protects register data */
 	struct platform_device *pdev;
 	struct hi3660_thermal_sensor sensors[HISI_MAX_SENSORS];
-
-	struct mbox_client cl;
-	struct mbox_chan *mbox;
+	void __iomem *thermal_base;
 };
+
+unsigned int sensor_reg_offset[HW_MAX_SENSORS] = { 0x1c, 0x5c, 0x9c, 0xdc };
 
 
 static int hi3660_thermal_get_temp(void *_sensor, int *temp)
 {
 	struct hi3660_thermal_sensor *sensor = _sensor;
 	struct hi3660_thermal_data *data = sensor->thermal;
-	int val;
+	unsigned int idx;
+	int val, average = 0, max = 0;
 
-	mutex_lock(&data->thermal_lock);
+	if (sensor->id < HW_MAX_SENSORS) {
+		val = readl(data->thermal_base + sensor_reg_offset[sensor->id]);
+		val = clamp_val(val, ADC_MIN, ADC_MAX);
+	} else {
+		for (idx = 0; idx < HW_MAX_SENSORS; idx++) {
+			val = readl(data->thermal_base
+					+ sensor_reg_offset[idx]);
+			val = clamp_val(val, ADC_MIN, ADC_MAX);
+			average += val;
+			if (val > max)
+				max = val;
+		}
 
-	sensor->msg[0] = 0x000E020B;
-	sensor->msg[1] = (sensor->msg[1] & 0xFFFF0000) | sensor->id;
+		if (sensor->id == SENSOR_MAX)
+			val = max;
+		else if (sensor->id == SENSOR_AVG)
+			val = average / HW_MAX_SENSORS;
+	}
 
-	mbox_send_message(data->mbox, sensor->msg);
+	*temp = ((val - ADC_MIN) * 165000) / (ADC_MAX - ADC_MIN) - 40000;
 
-	val = sensor->msg[1] >> 16;
-	val = clamp_val(val, 116, 922);
-	val = ((val - 116)* 1000 * 165) / (922 - 116) - 40000;
-	*temp = val;
-
-	mutex_unlock(&data->thermal_lock);
 	return 0;
 }
 
@@ -83,7 +95,7 @@ static int hi3660_thermal_register_sensor(struct platform_device *pdev,
 		struct hi3660_thermal_sensor *sensor,
 		int index)
 {
-	int ret;
+	int ret = 0;
 
 	sensor->id = index;
 	sensor->thermal = data;
@@ -93,12 +105,9 @@ static int hi3660_thermal_register_sensor(struct platform_device *pdev,
 	if (IS_ERR(sensor->tzd)) {
 		ret = PTR_ERR(sensor->tzd);
 		sensor->tzd = NULL;
-		dev_err(&pdev->dev, "failed to register sensor id %d: %d\n",
-			sensor->id, ret);
-		return ret;
 	}
 
-	return 0;
+	return ret;
 }
 
 static void hi3660_thermal_toggle_sensor(struct hi3660_thermal_sensor *sensor,
@@ -112,39 +121,33 @@ static void hi3660_thermal_toggle_sensor(struct hi3660_thermal_sensor *sensor,
 
 static int hi3660_thermal_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	struct hi3660_thermal_data *data;
+	struct resource *res;
 	int ret = 0;
 	int i;
 
-	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
+	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
-	mutex_init(&data->thermal_lock);
 	data->pdev = pdev;
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	data->thermal_base = devm_ioremap_resource(dev, res);
+	if (IS_ERR(data->thermal_base)) {
+		dev_err(dev, "failed get reg base\n");
+		return -ENOMEM;
+	}
 
 	platform_set_drvdata(pdev, data);
-
-	/* Use mailbox client with blocking mode */
-	data->cl.dev = &pdev->dev;
-	data->cl.tx_done = NULL;
-	data->cl.tx_block = true;
-	data->cl.tx_tout = 500;
-	data->cl.knows_txdone = false;
-
-	/* Allocate mailbox channel */
-	data->mbox = mbox_request_channel(&data->cl, 0);
-	if (IS_ERR(data->mbox)) {
-		dev_err(&pdev->dev, "failed get mailbox channel\n");
-		return PTR_ERR(data->mbox);
-	}
 
 	for (i = 0; i < HISI_MAX_SENSORS; ++i) {
 		ret = hi3660_thermal_register_sensor(pdev, data,
 						     &data->sensors[i], i);
 		if (ret)
 			dev_err(&pdev->dev,
-				"failed to register thermal sensor: %d\n", ret);
+				"failed to register thermal sensor%d: %d\n",
+				i, ret);
 		else
 			hi3660_thermal_toggle_sensor(&data->sensors[i], true);
 	}
@@ -168,12 +171,11 @@ static int hi3660_thermal_exit(struct platform_device *pdev)
 		thermal_zone_of_sensor_unregister(&pdev->dev, sensor->tzd);
 	}
 
-	mbox_free_channel(data->mbox);
 	return 0;
 }
 
 static const struct of_device_id hi3660_thermal_id_table[] = {
-	{ .compatible = "hisilicon,thermal-hi3660" },
+	{ .compatible = "hisilicon,hi3660-thermal" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, hi3660_thermal_id_table);
@@ -189,6 +191,7 @@ static struct platform_driver hi3660_thermal_driver = {
 
 module_platform_driver(hi3660_thermal_driver);
 
+MODULE_AUTHOR("Tao Wang <kevin.wangtao@hisilicon.com>");
 MODULE_AUTHOR("Leo Yan <leo.yan@linaro.org>");
 MODULE_DESCRIPTION("hi3660 thermal driver");
 MODULE_LICENSE("GPL");
