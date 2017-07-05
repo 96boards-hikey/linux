@@ -245,7 +245,6 @@ EXPORT_SYMBOL_GPL(ffs_lock);
 
 static struct ffs_dev *_ffs_find_dev(const char *name);
 static struct ffs_dev *_ffs_alloc_dev(void);
-static int _ffs_name_dev(struct ffs_dev *dev, const char *name);
 static void _ffs_free_dev(struct ffs_dev *dev);
 static void *ffs_acquire_dev(const char *dev_name);
 static void ffs_release_dev(struct ffs_data *ffs_data);
@@ -266,7 +265,7 @@ static void ffs_ep0_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct ffs_data *ffs = req->context;
 
-	complete_all(&ffs->ep0req_completion);
+	complete(&ffs->ep0req_completion);
 }
 
 static int __ffs_ep0_queue_wait(struct ffs_data *ffs, char *data, size_t len)
@@ -1230,7 +1229,7 @@ static long ffs_epfile_ioctl(struct file *file, unsigned code,
 			desc = epfile->ep->descs[desc_idx];
 
 			spin_unlock_irq(&epfile->ffs->eps_lock);
-			ret = copy_to_user((void *)value, desc, sizeof(*desc));
+			ret = copy_to_user((void *)value, desc, desc->bLength);
 			if (ret)
 				ret = -EFAULT;
 			return ret;
@@ -1806,7 +1805,7 @@ static void ffs_func_eps_disable(struct ffs_function *func)
 	unsigned long flags;
 
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
-	do {
+	while (count--) {
 		/* pending requests get nuked */
 		if (likely(ep->ep))
 			usb_ep_disable(ep->ep);
@@ -1817,7 +1816,7 @@ static void ffs_func_eps_disable(struct ffs_function *func)
 			__ffs_epfile_read_buffer_free(epfile);
 			++epfile;
 		}
-	} while (--count);
+	}
 	spin_unlock_irqrestore(&func->ffs->eps_lock, flags);
 }
 
@@ -1831,13 +1830,16 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 	int ret = 0;
 
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
-	do {
+	while(count--) {
 		struct usb_endpoint_descriptor *ds;
+		struct usb_ss_ep_comp_descriptor *comp_desc = NULL;
+		int needs_comp_desc = false;
 		int desc_idx;
 
-		if (ffs->gadget->speed == USB_SPEED_SUPER)
+		if (ffs->gadget->speed == USB_SPEED_SUPER) {
 			desc_idx = 2;
-		else if (ffs->gadget->speed == USB_SPEED_HIGH)
+			needs_comp_desc = true;
+		} else if (ffs->gadget->speed == USB_SPEED_HIGH)
 			desc_idx = 1;
 		else
 			desc_idx = 0;
@@ -1854,6 +1856,14 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 
 		ep->ep->driver_data = ep;
 		ep->ep->desc = ds;
+
+		if (needs_comp_desc) {
+			comp_desc = (struct usb_ss_ep_comp_descriptor *)(ds +
+					USB_DT_ENDPOINT_SIZE);
+			ep->ep->maxburst = comp_desc->bMaxBurst + 1;
+			ep->ep->comp_desc = comp_desc;
+		}
+
 		ret = usb_ep_enable(ep->ep);
 		if (likely(!ret)) {
 			epfile->ep = ep;
@@ -1867,7 +1877,7 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 
 		++ep;
 		++epfile;
-	} while (--count);
+	}
 	spin_unlock_irqrestore(&func->ffs->eps_lock, flags);
 
 	return ret;
@@ -2091,8 +2101,8 @@ static int __ffs_data_do_entity(enum ffs_entity_type type,
 
 	case FFS_STRING:
 		/*
-		 * Strings are indexed from 1 (0 is magic ;) reserved
-		 * for languages list or some such)
+		 * Strings are indexed from 1 (0 is reserved
+		 * for languages list)
 		 */
 		if (*valuep > helper->ffs->strings_count)
 			helper->ffs->strings_count = *valuep;
@@ -2101,7 +2111,7 @@ static int __ffs_data_do_entity(enum ffs_entity_type type,
 	case FFS_ENDPOINT:
 		d = (void *)desc;
 		helper->eps_count++;
-		if (helper->eps_count >= 15)
+		if (helper->eps_count >= FFS_MAX_EPS_COUNT)
 			return -EINVAL;
 		/* Check if descriptors for any speed were already parsed */
 		if (!helper->ffs->eps_count && !helper->ffs->interfaces_count)
@@ -3279,9 +3289,10 @@ static struct ffs_dev *_ffs_do_find_dev(const char *name)
 {
 	struct ffs_dev *dev;
 
+	if (!name)
+		return NULL;
+
 	list_for_each_entry(dev, &ffs_devices, entry) {
-		if (!dev->name || !name)
-			continue;
 		if (strcmp(dev->name, name) == 0)
 			return dev;
 	}
@@ -3357,42 +3368,11 @@ static void ffs_free_inst(struct usb_function_instance *f)
 	kfree(opts);
 }
 
-#define MAX_INST_NAME_LEN	40
-
 static int ffs_set_inst_name(struct usb_function_instance *fi, const char *name)
 {
-	struct f_fs_opts *opts;
-	char *ptr;
-	const char *tmp;
-	int name_len, ret;
-
-	name_len = strlen(name) + 1;
-	if (name_len > MAX_INST_NAME_LEN)
+	if (strlen(name) >= FIELD_SIZEOF(struct ffs_dev, name))
 		return -ENAMETOOLONG;
-
-	ptr = kstrndup(name, name_len, GFP_KERNEL);
-	if (!ptr)
-		return -ENOMEM;
-
-	opts = to_f_fs_opts(fi);
-	tmp = NULL;
-
-	ffs_dev_lock();
-
-	tmp = opts->dev->name_allocated ? opts->dev->name : NULL;
-	ret = _ffs_name_dev(opts->dev, ptr);
-	if (ret) {
-		kfree(ptr);
-		ffs_dev_unlock();
-		return ret;
-	}
-	opts->dev->name_allocated = true;
-
-	ffs_dev_unlock();
-
-	kfree(tmp);
-
-	return 0;
+	return ffs_name_dev(to_f_fs_opts(fi)->dev, name);
 }
 
 static struct usb_function_instance *ffs_alloc_inst(void)
@@ -3448,12 +3428,12 @@ static void ffs_func_unbind(struct usb_configuration *c,
 
 	/* cleanup after autoconfig */
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
-	do {
+	while (count--) {
 		if (ep->ep && ep->req)
 			usb_ep_free_request(ep->ep, ep->req);
 		ep->req = NULL;
 		++ep;
-	} while (--count);
+	}
 	spin_unlock_irqrestore(&func->ffs->eps_lock, flags);
 	kfree(func->eps);
 	func->eps = NULL;
@@ -3522,32 +3502,19 @@ static struct ffs_dev *_ffs_alloc_dev(void)
 	return dev;
 }
 
-/*
- * ffs_lock must be taken by the caller of this function
- * The caller is responsible for "name" being available whenever f_fs needs it
- */
-static int _ffs_name_dev(struct ffs_dev *dev, const char *name)
-{
-	struct ffs_dev *existing;
-
-	existing = _ffs_do_find_dev(name);
-	if (existing)
-		return -EBUSY;
-
-	dev->name = name;
-
-	return 0;
-}
-
-/*
- * The caller is responsible for "name" being available whenever f_fs needs it
- */
 int ffs_name_dev(struct ffs_dev *dev, const char *name)
 {
-	int ret;
+	struct ffs_dev *existing;
+	int ret = 0;
 
 	ffs_dev_lock();
-	ret = _ffs_name_dev(dev, name);
+
+	existing = _ffs_do_find_dev(name);
+	if (!existing)
+		strlcpy(dev->name, name, ARRAY_SIZE(dev->name));
+	else if (existing != dev)
+		ret = -EBUSY;
+
 	ffs_dev_unlock();
 
 	return ret;
@@ -3577,8 +3544,6 @@ EXPORT_SYMBOL_GPL(ffs_single_dev);
 static void _ffs_free_dev(struct ffs_dev *dev)
 {
 	list_del(&dev->entry);
-	if (dev->name_allocated)
-		kfree(dev->name);
 
 	/* Clear the private_data pointer to stop incorrect dev access */
 	if (dev->ffs_data)
@@ -3666,6 +3631,7 @@ static void ffs_closed(struct ffs_data *ffs)
 {
 	struct ffs_dev *ffs_obj;
 	struct f_fs_opts *opts;
+	struct config_item *ci;
 
 	ENTER();
 	ffs_dev_lock();
@@ -3689,8 +3655,11 @@ static void ffs_closed(struct ffs_data *ffs)
 	    || !atomic_read(&opts->func_inst.group.cg_item.ci_kref.refcount))
 		goto done;
 
-	unregister_gadget_item(ffs_obj->opts->
-			       func_inst.group.cg_item.ci_parent->ci_parent);
+	ci = opts->func_inst.group.cg_item.ci_parent->ci_parent;
+	ffs_dev_unlock();
+
+	unregister_gadget_item(ci);
+	return;
 done:
 	ffs_dev_unlock();
 }

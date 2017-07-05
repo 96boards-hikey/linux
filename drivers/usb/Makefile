@@ -13,7 +13,7 @@ obj-$(CONFIG_USB_ISP1760)	+= isp1760/
 
 obj-$(CONFIG_USB_MON)		+= mon/
 
-obj-$(CONFIG_PCI)		+= host/
+obj-$(CONFIG_USB_PCI)		+= host/
 obj-$(CONFIG_USB_EHCI_HCD)	+= host/
 obj-$(CONFIG_USB_ISP116X_HCD)	+= host/
 obj-$(CONFIG_USB_OHCI_HCD)	+= host/
@@ -48,7 +48,7 @@ obj-$(CONFIG_USB_MICROTEK)	+= image/
 obj-$(CONFIG_USB_SERIAL)	+= serial/
 
 obj-$(CONFIG_USB)		+= misc/
-obj-$(CONFIG_EARLY_PRINTK_DBGP)	+= early/
+obj-$(CONFIG_EARLY_PRINTK_USB)	+= early/
 
 obj-$(CONFIG_USB_ATM)		+= atm/
 obj-$(CONFIG_USB_SPEEDTOUCH)	+= atm/
@@ -61,3 +61,6 @@ obj-$(CONFIG_USB_GADGET)	+= gadget/
 obj-$(CONFIG_USB_COMMON)	+= common/
 
 obj-$(CONFIG_USBIP_CORE)	+= usbip/
+
+obj-$(CONFIG_TYPEC)		+= typec/
+obj-$(CONFIG_TCPC_CLASS)	+= pd/
