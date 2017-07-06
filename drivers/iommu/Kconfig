@@ -362,4 +362,22 @@ config MTK_IOMMU_V1
 
 	  if unsure, say N here.
 
+config HISI_IODOMAIN_API
+	bool
+
+config HISI_IOMMU
+	bool "Hisilicon IOMMU Support"
+	select IOMMU_API
+	select HISI_IODOMAIN_API
+	help
+	  Hisilicon IOMMU Support.
+
+config HISI_IOMMU_LPAE
+	bool "Hisilicon IOMMU LPAE Support"
+	select IOMMU_API
+	select IODOMAIN_API
+	select HISI_IOMMU
+	help
+	  Hisilicon IOMMU Support.
+
 endif # IOMMU_SUPPORT

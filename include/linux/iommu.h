@@ -31,6 +31,11 @@
 #define IOMMU_CACHE	(1 << 2) /* DMA cache coherency */
 #define IOMMU_NOEXEC	(1 << 3)
 #define IOMMU_MMIO	(1 << 4) /* e.g. things like MSI doorbells */
+#if CONFIG_HISI_IOMMU
+#define IOMMU_DEVICE    (1 << 4)
+#define IOMMU_SEC       (1 << 5)
+#define IOMMU_EXEC      (1 << 6)
+#endif
 
 struct iommu_ops;
 struct iommu_group;
@@ -84,6 +89,7 @@ struct iommu_domain {
 	void *handler_token;
 	struct iommu_domain_geometry geometry;
 	void *iova_cookie;
+	void *priv;
 };
 
 enum iommu_cap {
@@ -116,6 +122,28 @@ enum iommu_attr {
 	DOMAIN_ATTR_NESTING,	/* two stages of translation */
 	DOMAIN_ATTR_MAX,
 };
+
+#if CONFIG_HISI_IOMMU
+/* metadata for iommu mapping */
+struct iommu_map_format {
+	unsigned long iova_start;
+	unsigned long iova_size;
+	unsigned long iommu_ptb_base;
+	unsigned long iommu_iova_base;
+	unsigned long header_size;
+	unsigned long phys_page_line;
+	unsigned long virt_page_line;
+	unsigned long is_tile;
+	unsigned long prot;
+};
+
+struct tile_format {
+	unsigned long header_size;
+	unsigned long is_tile;
+	unsigned long phys_page_line;
+	unsigned long virt_page_line;
+};
+#endif
 
 /**
  * struct iommu_dm_region - descriptor for a direct mapped memory region
@@ -201,6 +229,14 @@ struct iommu_ops {
 
 	int (*of_xlate)(struct device *dev, struct of_phandle_args *args);
 
+#if CONFIG_HISI_IOMMU
+	int (*map_tile)(struct iommu_domain *domain, unsigned long iova,
+			struct scatterlist *sg, size_t size, int prot,
+			struct tile_format *format);
+	size_t (*unmap_tile)(struct iommu_domain *domain, unsigned long iova,
+			     size_t size);
+#endif
+
 	unsigned long pgsize_bitmap;
 };
 
@@ -272,7 +308,14 @@ struct device *iommu_device_create(struct device *parent, void *drvdata,
 void iommu_device_destroy(struct device *dev);
 int iommu_device_link(struct device *dev, struct device *link);
 void iommu_device_unlink(struct device *dev, struct device *link);
+#if CONFIG_HISI_IOMMU
+int iommu_map_tile(struct iommu_domain *domain, unsigned long iova,
+		    struct scatterlist *sg, size_t size, int prot,
+		    struct tile_format *format);
 
+int iommu_unmap_tile(struct iommu_domain *domain, unsigned long iova,
+		      size_t size);
+#endif
 /* Window handling function prototypes */
 extern int iommu_domain_window_enable(struct iommu_domain *domain, u32 wnd_nr,
 				      phys_addr_t offset, u64 size,
