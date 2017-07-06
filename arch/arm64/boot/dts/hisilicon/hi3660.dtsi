@@ -409,7 +409,7 @@
 
 		stub_clock: stub_clock {
 			compatible = "hisilicon,hi3660-stub-clk";
-			reg = <0x0 0xe896b000 0x0 0x1000>;
+			reg = <0x0 0xe896b500 0x0 0x0100>;
 			#clock-cells = <1>;
 			mbox-names = "mbox-tx";
 			mboxes = <&mailbox 13 3 0>;
@@ -1280,6 +1280,11 @@
 						trip = <&target>;
 						contribution = <512>;
 						cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+					map2 {
+						trip = <&target>;
+						contribution = <1024>;
+						cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 					};
 				};
 			};
