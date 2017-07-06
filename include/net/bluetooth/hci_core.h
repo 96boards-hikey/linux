@@ -383,6 +383,11 @@ struct hci_dev {
 
 	DECLARE_BITMAP(dev_flags, __HCI_NUM_FLAGS);
 
+#ifdef CONFIG_BT_LEDS
+	struct led_trigger	*tx_led, *rx_led;
+	char			tx_led_name[32], rx_led_name[32];
+#endif
+
 	__s8			adv_tx_power;
 	__u8			adv_data[HCI_MAX_AD_LENGTH];
 	__u8			adv_data_len;
