@@ -1,0 +1,16 @@
+* Temperature Sensor on hisilicon hi3660 SoC
+
+** Required properties :
+
+- compatible: "hisilicon,thermal-hi3660".
+- reg: physical base address of thermal sensor and length of memory mapped
+  region.
+- #thermal-sensor-cells: Should be 1. See ./thermal.txt for a description.
+
+Example :
+
+	tsensor: tsensor {
+		compatible = "hisilicon,thermal-hi3660";
+		reg = <0x0 0xfff30000 0x0 0x1000>;
+		#thermal-sensor-cells = <1>;
+	 };
