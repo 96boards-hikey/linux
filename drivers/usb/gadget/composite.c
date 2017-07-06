@@ -201,7 +201,12 @@ ep_found:
 	_ep->desc = chosen_desc;
 	_ep->comp_desc = NULL;
 	_ep->maxburst = 0;
-	_ep->mult = 0;
+	_ep->mult = 1;
+
+	if (g->speed == USB_SPEED_HIGH && (usb_endpoint_xfer_isoc(_ep->desc) ||
+				usb_endpoint_xfer_int(_ep->desc)))
+		_ep->mult = usb_endpoint_maxp_mult(_ep->desc);
+
 	if (!want_comp_desc)
 		return 0;
 
@@ -218,7 +223,7 @@ ep_found:
 		switch (usb_endpoint_type(_ep->desc)) {
 		case USB_ENDPOINT_XFER_ISOC:
 			/* mult: bits 1:0 of bmAttributes */
-			_ep->mult = comp_desc->bmAttributes & 0x3;
+			_ep->mult = (comp_desc->bmAttributes & 0x3) + 1;
 		case USB_ENDPOINT_XFER_BULK:
 		case USB_ENDPOINT_XFER_INT:
 			_ep->maxburst = comp_desc->bMaxBurst + 1;
@@ -310,6 +315,9 @@ void usb_remove_function(struct usb_configuration *c, struct usb_function *f)
 	list_del(&f->list);
 	if (f->unbind)
 		f->unbind(c, f);
+
+	if (f->bind_deactivated)
+		usb_function_activate(f);
 }
 EXPORT_SYMBOL_GPL(usb_remove_function);
 
@@ -951,12 +959,8 @@ static void remove_config(struct usb_composite_dev *cdev,
 
 		f = list_first_entry(&config->functions,
 				struct usb_function, list);
-		list_del(&f->list);
-		if (f->unbind) {
-			DBG(cdev, "unbind function '%s'/%p\n", f->name, f);
-			f->unbind(config, f);
-			/* may free memory for "f" */
-		}
+
+		usb_remove_function(config, f);
 	}
 	list_del(&config->list);
 	if (config->unbind) {
@@ -1689,9 +1693,7 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		value = min(w_length, (u16) 1);
 		break;
 
-	/* function drivers must handle get/set altsetting; if there's
-	 * no get() method, we know only altsetting zero works.
-	 */
+	/* function drivers must handle get/set altsetting */
 	case USB_REQ_SET_INTERFACE:
 		if (ctrl->bRequestType != USB_RECIP_INTERFACE)
 			goto unknown;
@@ -1700,7 +1702,13 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		f = cdev->config->interface[intf];
 		if (!f)
 			break;
-		if (w_value && !f->set_alt)
+
+		/*
+		 * If there's no get_alt() method, we know only altsetting zero
+		 * works. There is no need to check if set_alt() is not NULL
+		 * as we check this in usb_add_function().
+		 */
+		if (w_value && !f->get_alt)
 			break;
 		value = f->set_alt(f, w_index, w_value);
 		if (value == USB_GADGET_DELAYED_STATUS) {
@@ -2138,7 +2146,7 @@ int composite_os_desc_req_prepare(struct usb_composite_dev *cdev,
 	cdev->os_desc_req->buf = kmalloc(4096, GFP_KERNEL);
 	if (!cdev->os_desc_req->buf) {
 		ret = -ENOMEM;
-		kfree(cdev->os_desc_req);
+		usb_ep_free_request(ep0, cdev->os_desc_req);
 		goto end;
 	}
 	cdev->os_desc_req->context = cdev;
@@ -2382,18 +2390,8 @@ EXPORT_SYMBOL_GPL(usb_composite_setup_continue);
 
 static char *composite_default_mfr(struct usb_gadget *gadget)
 {
-	char *mfr;
-	int len;
-
-	len = snprintf(NULL, 0, "%s %s with %s", init_utsname()->sysname,
-			init_utsname()->release, gadget->name);
-	len++;
-	mfr = kmalloc(len, GFP_KERNEL);
-	if (!mfr)
-		return NULL;
-	snprintf(mfr, len, "%s %s with %s", init_utsname()->sysname,
-			init_utsname()->release, gadget->name);
-	return mfr;
+	return kasprintf(GFP_KERNEL, "%s %s with %s", init_utsname()->sysname,
+			 init_utsname()->release, gadget->name);
 }
 
 void usb_composite_overwrite_options(struct usb_composite_dev *cdev,
