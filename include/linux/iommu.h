@@ -31,7 +31,7 @@
 #define IOMMU_CACHE	(1 << 2) /* DMA cache coherency */
 #define IOMMU_NOEXEC	(1 << 3)
 #define IOMMU_MMIO	(1 << 4) /* e.g. things like MSI doorbells */
-#if CONFIG_HISI_IOMMU
+#ifdef CONFIG_HISI_IOMMU
 #define IOMMU_DEVICE    (1 << 4)
 #define IOMMU_SEC       (1 << 5)
 #define IOMMU_EXEC      (1 << 6)
@@ -123,7 +123,7 @@ enum iommu_attr {
 	DOMAIN_ATTR_MAX,
 };
 
-#if CONFIG_HISI_IOMMU
+#ifdef CONFIG_HISI_IOMMU
 /* metadata for iommu mapping */
 struct iommu_map_format {
 	unsigned long iova_start;
@@ -229,7 +229,7 @@ struct iommu_ops {
 
 	int (*of_xlate)(struct device *dev, struct of_phandle_args *args);
 
-#if CONFIG_HISI_IOMMU
+#ifdef CONFIG_HISI_IOMMU
 	int (*map_tile)(struct iommu_domain *domain, unsigned long iova,
 			struct scatterlist *sg, size_t size, int prot,
 			struct tile_format *format);
@@ -308,7 +308,7 @@ struct device *iommu_device_create(struct device *parent, void *drvdata,
 void iommu_device_destroy(struct device *dev);
 int iommu_device_link(struct device *dev, struct device *link);
 void iommu_device_unlink(struct device *dev, struct device *link);
-#if CONFIG_HISI_IOMMU
+#ifdef CONFIG_HISI_IOMMU
 int iommu_map_tile(struct iommu_domain *domain, unsigned long iova,
 		    struct scatterlist *sg, size_t size, int prot,
 		    struct tile_format *format);
