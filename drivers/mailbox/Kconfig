@@ -116,6 +116,12 @@ config HI6220_MBOX
 	  between application processors and MCU. Say Y here if you want to
 	  build Hi6220 mailbox controller driver.
 
+config HI3660_MBOX
+	tristate "Hi3660 Mailbox"
+	depends on ARCH_HISI
+	help
+	  Mailbox implementation for Hi3660.
+
 config MAILBOX_TEST
 	tristate "Mailbox Test Client"
 	depends on OF
