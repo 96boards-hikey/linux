@@ -11,23 +11,61 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/bitops.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/mfd/syscon.h>
 #include <linux/notifier.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
+#include <linux/regmap.h>
+#include <asm/system_misc.h>
 
 #include <asm/proc-fns.h>
 
 static void __iomem *base;
 static u32 reboot_offset;
+static struct regmap *pmu_regmap;
+static struct regmap *sctrl_regmap;
+
+#define REBOOT_REASON_BOOTLOADER (0x01)
+#define REBOOT_REASON_COLDBOOT   (0x00)
+#define DDR_BYPASS               BIT(31)
+
+#define RST_FLAG_MASK            GENMASK(7, 0)
+
+#define PMU_HRST_OFFSET		((0x101) << 2)
+#define SCPEREN1_OFFSET		(0x170)
 
 static int hisi_restart_handler(struct notifier_block *this,
 				unsigned long mode, void *cmd)
 {
-	writel_relaxed(0xdeadbeef, base + reboot_offset);
+	int ret;
+	char reboot_reason;
+
+	if (!cmd || !strcmp(cmd, "bootloader"))
+		reboot_reason = REBOOT_REASON_BOOTLOADER;
+	else
+		reboot_reason = REBOOT_REASON_COLDBOOT;
+
+	if (base) {
+		writel_relaxed(0xdeadbeef, base + reboot_offset);
+	} else {
+		ret = regmap_update_bits(pmu_regmap, PMU_HRST_OFFSET,
+					 RST_FLAG_MASK, reboot_reason);
+		if (ret)
+			return ret;
+
+		ret = regmap_write(sctrl_regmap, SCPEREN1_OFFSET, DDR_BYPASS);
+		if (ret)
+			return ret;
+
+		ret = regmap_write(sctrl_regmap, reboot_offset, 0xdeadbeef);
+		if (ret)
+			return ret;
+	}
 
 	while (1)
 		cpu_do_idle();
@@ -47,8 +85,17 @@ static int hisi_reboot_probe(struct platform_device *pdev)
 
 	base = of_iomap(np, 0);
 	if (!base) {
-		WARN(1, "failed to map base address");
-		return -ENODEV;
+		pmu_regmap = syscon_regmap_lookup_by_phandle(np, "pmu-regmap");
+		if (!pmu_regmap) {
+			WARN(1, "failed to regmap pmu address");
+			return -ENODEV;
+		}
+
+		sctrl_regmap = syscon_regmap_lookup_by_phandle(np, "sctrl-regmap");
+		if (!sctrl_regmap) {
+			WARN(1, "failed to regmap sctrl address");
+			return -ENODEV;
+		}
 	}
 
 	if (of_property_read_u32(np, "reboot-offset", &reboot_offset) < 0) {
@@ -64,11 +111,13 @@ static int hisi_reboot_probe(struct platform_device *pdev)
 		iounmap(base);
 	}
 
+	arm_pm_restart = NULL;
 	return err;
 }
 
 static const struct of_device_id hisi_reboot_of_match[] = {
 	{ .compatible = "hisilicon,sysctrl" },
+	{ .compatible = "hisilicon,hi3660-reboot" },
 	{}
 };
 
