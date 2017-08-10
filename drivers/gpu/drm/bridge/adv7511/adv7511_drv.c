@@ -325,7 +325,7 @@ static void adv7511_set_link_config(struct adv7511 *adv7511,
 	adv7511->rgb = config->input_colorspace == HDMI_COLORSPACE_RGB;
 }
 
-static void adv7511_power_on(struct adv7511 *adv7511)
+static void __adv7511_power_on(struct adv7511 *adv7511)
 {
 	adv7511->current_edid_segment = -1;
 
@@ -338,7 +338,7 @@ static void adv7511_power_on(struct adv7511 *adv7511)
 		 * Still, let's be safe and stick to the documentation.
 		 */
 		regmap_write(adv7511->regmap, ADV7511_REG_INT_ENABLE(0),
-			     ADV7511_INT0_EDID_READY);
+			     ADV7511_INT0_EDID_READY | ADV7511_INT0_HPD);
 		regmap_write(adv7511->regmap, ADV7511_REG_INT_ENABLE(1),
 			     ADV7511_INT1_DDC_ERROR);
 	}
@@ -359,24 +359,31 @@ static void adv7511_power_on(struct adv7511 *adv7511)
 	 * Most of the registers are reset during power down or when HPD is low.
 	 */
 	regcache_sync(adv7511->regmap);
+	msleep(200);
+}
 
+static void adv7511_power_on(struct adv7511 *adv7511)
+{
+	__adv7511_power_on(adv7511);
 	if (adv7511->type == ADV7533)
 		adv7533_dsi_power_on(adv7511);
-
 	adv7511->powered = true;
 }
 
-static void adv7511_power_off(struct adv7511 *adv7511)
+static void __adv7511_power_off(struct adv7511 *adv7511)
 {
 	/* TODO: setup additional power down modes */
 	regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER,
 			   ADV7511_POWER_POWER_DOWN,
 			   ADV7511_POWER_POWER_DOWN);
 	regcache_mark_dirty(adv7511->regmap);
+}
 
+static void adv7511_power_off(struct adv7511 *adv7511)
+{
+	__adv7511_power_off(adv7511);
 	if (adv7511->type == ADV7533)
 		adv7533_dsi_power_off(adv7511);
-
 	adv7511->powered = false;
 }
 
@@ -402,6 +409,27 @@ static bool adv7511_hpd(struct adv7511 *adv7511)
 	return false;
 }
 
+static void adv7511_hpd_work(struct work_struct *work)
+{
+	struct adv7511 *adv7511 = container_of(work, struct adv7511, hpd_work);
+	enum drm_connector_status status;
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(adv7511->regmap, ADV7511_REG_STATUS, &val);
+	if (ret < 0)
+		status = connector_status_disconnected;
+	else if (val & ADV7511_STATUS_HPD)
+		status = connector_status_connected;
+	else
+		status = connector_status_disconnected;
+
+	if (adv7511->connector.status != status)
+		drm_kms_helper_hotplug_event(adv7511->connector.dev);
+
+	adv7511->connector.status = status;
+}
+
 static int adv7511_irq_process(struct adv7511 *adv7511, bool process_hpd)
 {
 	unsigned int irq0, irq1;
@@ -419,7 +447,7 @@ static int adv7511_irq_process(struct adv7511 *adv7511, bool process_hpd)
 	regmap_write(adv7511->regmap, ADV7511_REG_INT(1), irq1);
 
 	if (process_hpd && irq0 & ADV7511_INT0_HPD && adv7511->bridge.encoder)
-		drm_helper_hpd_irq_event(adv7511->connector.dev);
+		schedule_work(&adv7511->hpd_work);
 
 	if (irq0 & ADV7511_INT0_EDID_READY || irq1 & ADV7511_INT1_DDC_ERROR) {
 		adv7511->edid_read = true;
@@ -545,24 +573,13 @@ static int adv7511_get_modes(struct adv7511 *adv7511,
 	unsigned int count;
 
 	/* Reading the EDID only works if the device is powered */
-	if (!adv7511->powered) {
-		regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER,
-				   ADV7511_POWER_POWER_DOWN, 0);
-		if (adv7511->i2c_main->irq) {
-			regmap_write(adv7511->regmap, ADV7511_REG_INT_ENABLE(0),
-				     ADV7511_INT0_EDID_READY);
-			regmap_write(adv7511->regmap, ADV7511_REG_INT_ENABLE(1),
-				     ADV7511_INT1_DDC_ERROR);
-		}
-		adv7511->current_edid_segment = -1;
-	}
+	if (!adv7511->powered)
+		__adv7511_power_on(adv7511);
 
 	edid = drm_do_get_edid(connector, adv7511_get_edid_block, adv7511);
 
 	if (!adv7511->powered)
-		regmap_update_bits(adv7511->regmap, ADV7511_REG_POWER,
-				   ADV7511_POWER_POWER_DOWN,
-				   ADV7511_POWER_POWER_DOWN);
+		__adv7511_power_off(adv7511);
 
 	kfree(adv7511->edid);
 	adv7511->edid = edid;
@@ -622,8 +639,24 @@ static int adv7511_mode_valid(struct adv7511 *adv7511,
 {
 	if (mode->clock > 165000)
 		return MODE_CLOCK_HIGH;
-
-	return MODE_OK;
+	/*
+	 * some work well modes which want to put in the front of the mode list.
+	 */
+	DRM_DEBUG("Checking mode %ix%i@%i clock: %i...",
+		  mode->hdisplay, mode->vdisplay, drm_mode_vrefresh(mode), mode->clock);
+	if ((mode->hdisplay == 1920 && mode->vdisplay == 1080 && mode->clock == 148500) ||
+	    (mode->hdisplay == 1280 && mode->vdisplay == 800 && mode->clock == 83496) ||
+	    (mode->hdisplay == 1280 && mode->vdisplay == 720 && mode->clock == 74440) ||
+	    (mode->hdisplay == 1280 && mode->vdisplay == 720 && mode->clock == 74250) ||
+	    (mode->hdisplay == 1024 && mode->vdisplay == 768 && mode->clock == 75000) ||
+	    (mode->hdisplay == 1024 && mode->vdisplay == 768 && mode->clock == 81833) ||
+	    (mode->hdisplay == 800 && mode->vdisplay == 600 && mode->clock == 40000)) {
+		mode->type |= DRM_MODE_TYPE_PREFERRED;
+		DRM_DEBUG("OK\n");
+		return MODE_OK;
+	}
+	DRM_DEBUG("BAD\n");
+	return MODE_BAD;
 }
 
 static void adv7511_mode_set(struct adv7511 *adv7511,
@@ -825,6 +858,10 @@ static int adv7511_bridge_attach(struct drm_bridge *bridge)
 	if (adv->type == ADV7533)
 		ret = adv7533_attach_dsi(adv);
 
+	if (adv->i2c_main->irq)
+		regmap_write(adv->regmap, ADV7511_REG_INT_ENABLE(0),
+				ADV7511_INT0_HPD);
+
 	return ret;
 }
 
@@ -1006,6 +1043,8 @@ static int adv7511_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 			goto err_i2c_unregister_edid;
 	}
 
+	INIT_WORK(&adv7511->hpd_work, adv7511_hpd_work);
+
 	if (i2c->irq) {
 		init_waitqueue_head(&adv7511->wq);
 
@@ -1037,6 +1076,8 @@ static int adv7511_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 		goto err_unregister_cec;
 	}
 
+	adv7511_audio_init(dev, adv7511);
+
 	return 0;
 
 err_unregister_cec:
@@ -1057,6 +1098,8 @@ static int adv7511_remove(struct i2c_client *i2c)
 	}
 
 	drm_bridge_remove(&adv7511->bridge);
+
+	adv7511_audio_exit(adv7511);
 
 	i2c_unregister_device(adv7511->i2c_edid);
 
