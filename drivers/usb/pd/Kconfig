@@ -1,0 +1,1 @@
+source "drivers/usb/pd/richtek/Kconfig"

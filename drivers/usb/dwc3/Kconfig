@@ -1,7 +1,7 @@
 config USB_DWC3
 	tristate "DesignWare USB3 DRD Core Support"
 	depends on (USB || USB_GADGET) && HAS_DMA
-	select USB_XHCI_PLATFORM if USB_XHCI_HCD
+	select USB_XHCI_PLATFORM if USB_SUPPORT && USB_XHCI_HCD
 	help
 	  Say Y or M here if your system has a Dual Role SuperSpeed
 	  USB controller based on the DesignWare USB3 IP Core.
@@ -87,15 +87,6 @@ config USB_DWC3_KEYSTONE
 	  Support of USB2/3 functionality in TI Keystone2 platforms.
 	  Say 'Y' or 'M' here if you have one such device
 
-config USB_DWC3_OF_SIMPLE
-       tristate "Generic OF Simple Glue Layer"
-       depends on OF && COMMON_CLK
-       default USB_DWC3
-       help
-         Support USB2/3 functionality in simple SoC integrations.
-	 Currently supports Xilinx and Qualcomm DWC USB3 IP.
-	 Say 'Y' or 'M' if you have one such device.
-
 config USB_DWC3_ST
 	tristate "STMicroelectronics Platforms"
 	depends on ARCH_STI && OF
@@ -105,4 +96,35 @@ config USB_DWC3_ST
 	  inside (i.e. STiH407).
 	  Say 'Y' or 'M' if you have one such device.
 
+config USB_DWC3_QCOM
+	tristate "Qualcomm Platforms"
+	depends on ARCH_QCOM || COMPILE_TEST
+	default USB_DWC3
+	help
+	  Recent Qualcomm SoCs ship with one DesignWare Core USB3 IP inside,
+	  say 'Y' or 'M' if you have one such device.
+	  
+config USB_DWC3_HISI
+	tristate "Hisilicon Platforms"
+	select USB_DWC3_OTG
+	default USB_DWC3
+	help
+	  Support of USB2/3 functionality in hisilicon platforms,
+	  Say 'Y' or 'M' here if you have one such device.
+
+config HISI_USB_DWC3_MASK_IRQ_WORKAROUND
+	bool "Enable workaround for hisi dwc3 mask irq bug"
+	depends on USB_DWC3_HISI
+	default n
+	help
+	  For some hisi dwc3, masking dwc3 irq can't work well.
+	  Say Y here if you have such problem.
+
+comment "Other features"
+
+config USB_DWC3_OTG
+	bool "Enable DWC3 OTG"
+	default n
+	help
+	  Say Y here to enable DWC3 OTG feature.
 endif
