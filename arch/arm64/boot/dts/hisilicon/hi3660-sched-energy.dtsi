@@ -1,0 +1,72 @@
+/*
+ * Hi3660 specific energy cost model data. There are no unit
+ * requirements for the data. Data can be normalized to any
+ * reference point, but the normalization must be consistent.
+ * That is, one bogo-joule/watt must be the same quantity for
+ * all data, but we don't care what it is.
+ */
+
+energy-costs {
+	CPU_COST_A72: core-cost0 {
+		busy-cost-data = <
+			373    191
+			591    370
+			747    596
+			878    876
+			1023   1214
+		>;
+		idle-cost-data = <
+			50
+			50
+			15
+			0
+			0
+		>;
+	};
+	CPU_COST_A53: core-cost1 {
+		busy-cost-data = <
+			107    32
+			209    69
+			306    119
+			383    181
+			402    242
+		>;
+		idle-cost-data = <
+			14
+			14
+			0
+			0
+		>;
+	};
+	CLUSTER_COST_A72: cluster-cost0 {
+		busy-cost-data = <
+			373   128
+			591   176
+			747   233
+			878   308
+			1023  413
+		>;
+		idle-cost-data = <
+			150
+			150
+			150
+			150
+			0
+		>;
+	};
+	CLUSTER_COST_A53: cluster-cost1 {
+		busy-cost-data = <
+			107   16
+			209   28
+			306   44
+			383   64
+			402   84
+		>;
+		idle-cost-data = <
+			16
+			16
+			16
+			0
+		>;
+	};
+};

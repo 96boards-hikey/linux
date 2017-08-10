@@ -1,0 +1,32 @@
+/{
+	gpu: mali@E82C0000 {
+		compatible = "arm,malit6xx", "arm,mali-midgard";
+		gpu_outstanding = <0x0>;
+		reg = <0x0 0xE82C0000 0x0 0x4000>;
+		interrupts = <0 258 4 0 259 4 0 260 4>;
+		interrupt-names = "JOB", "MMU", "GPU";
+		clocks = <&stub_clock HI3660_CLK_STUB_GPU>;
+		operating-points = <
+			/* <frequency> <voltage>*/
+			178000  650000
+			400000	700000
+			533000	800000
+			807000	900000
+			960000	1000000
+			1037000 1100000
+		>;
+		cooling-min-level = <5>;
+		cooling-max-level = <0>;
+		#cooling-cells = <2>; /* min followed by max */
+
+		gpu_power_model: power_model {
+			compatible = "arm,mali-simple-power-model";
+			voltage = <700>;
+			frequency = <400>;
+			static-power = <112>;
+			dynamic-power = <980>;
+			ts = <48020 2120 (-50) 1>;
+			thermal-zone = "cls0";
+		};
+	};
+};
