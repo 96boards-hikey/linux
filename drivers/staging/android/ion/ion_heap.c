@@ -22,6 +22,8 @@
 #include <linux/sched.h>
 #include <linux/scatterlist.h>
 #include <linux/vmalloc.h>
+#include <linux/hisi/ion-iommu.h>
+
 #include "ion.h"
 #include "ion_priv.h"
 
@@ -93,7 +95,7 @@ int ion_heap_map_user(struct ion_heap *heap, struct ion_buffer *buffer,
 		}
 		len = min(len, remainder);
 		ret = remap_pfn_range(vma, addr, page_to_pfn(page), len,
-				      vma->vm_page_prot);
+				vma->vm_page_prot);
 		if (ret)
 			return ret;
 		addr += len;
@@ -101,6 +103,31 @@ int ion_heap_map_user(struct ion_heap *heap, struct ion_buffer *buffer,
 			return 0;
 	}
 	return 0;
+}
+
+int ion_heap_map_iommu(struct ion_buffer *buffer,
+			struct ion_iommu_map *map_data)
+{
+	struct sg_table *table = buffer->sg_table;
+	int ret;
+
+	ret = hisi_iommu_map_domain(table->sgl, &map_data->format);
+	if (ret) {
+		pr_err("%s: iommu map failed, heap: %s\n", __func__,
+			buffer->heap->name);
+	}
+	return ret;
+}
+
+void ion_heap_unmap_iommu(struct ion_iommu_map *map_data)
+{
+	int ret;
+
+	ret = hisi_iommu_unmap_domain(&map_data->format);
+	if (ret) {
+		pr_err("%s: iommu unmap failed, heap: %s\n", __func__,
+			map_data->buffer->heap->name);
+	}
 }
 
 static int ion_heap_clear_pages(struct page **pages, int num, pgprot_t pgprot)
@@ -116,7 +143,7 @@ static int ion_heap_clear_pages(struct page **pages, int num, pgprot_t pgprot)
 }
 
 static int ion_heap_sglist_zero(struct scatterlist *sgl, unsigned int nents,
-				pgprot_t pgprot)
+						pgprot_t pgprot)
 {
 	int p = 0;
 	int ret = 0;
@@ -181,7 +208,7 @@ size_t ion_heap_freelist_size(struct ion_heap *heap)
 }
 
 static size_t _ion_heap_freelist_drain(struct ion_heap *heap, size_t size,
-				       bool skip_pools)
+				bool skip_pools)
 {
 	struct ion_buffer *buffer;
 	size_t total_drained = 0;
@@ -266,7 +293,7 @@ int ion_heap_init_deferred_free(struct ion_heap *heap)
 }
 
 static unsigned long ion_heap_shrink_count(struct shrinker *shrinker,
-					   struct shrink_control *sc)
+						struct shrink_control *sc)
 {
 	struct ion_heap *heap = container_of(shrinker, struct ion_heap,
 					     shrinker);
@@ -279,7 +306,7 @@ static unsigned long ion_heap_shrink_count(struct shrinker *shrinker,
 }
 
 static unsigned long ion_heap_shrink_scan(struct shrinker *shrinker,
-					  struct shrink_control *sc)
+						struct shrink_control *sc)
 {
 	struct ion_heap *heap = container_of(shrinker, struct ion_heap,
 					     shrinker);
