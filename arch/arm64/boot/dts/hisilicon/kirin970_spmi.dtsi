@@ -1,0 +1,21 @@
+/*
+ * Hisilicon Ltd. kirin970 SoC
+ *
+ * Copyright (C) 2014-2016 Hisilicon Ltd.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * publishhed by the Free Software Foundation.
+ */
+
+/{
+		spmi: spmi@FFF24000 {
+				compatible = "hisilicon,spmi-controller";
+			        #address-cells = <2>;
+		                #size-cells = <0>;
+				status = "ok";
+				reg = <0x0 0xfff24000 0x0 0x1000>;
+				spmi-channel = <2>;
+		};
+};
+

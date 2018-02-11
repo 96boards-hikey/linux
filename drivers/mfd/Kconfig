@@ -358,6 +358,16 @@ config MFD_HI655X_PMIC
 	help
 	  Select this option to enable Hisilicon hi655x series pmic driver.
 
+config HISI_PMIC_PMU_SPMI
+	tristate "HiSilicon PMU/Codec IC and use spmi passageway"
+	depends on OF
+	depends on HISI_SPMI
+	help
+	  This driver supports HiSilicon Hisi power management and codec IC,
+	  including regulators, codec, ADCs, Coulomb counter, etc. Memory
+	  mapped I/O ports are the way of communication with it. and use spmi
+	  passageway read pmu address.
+
 config HTC_PASIC3
 	tristate "HTC PASIC3 LED/DS1WM chip support"
 	select MFD_CORE

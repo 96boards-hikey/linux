@@ -1,0 +1,1490 @@
+/*
+ * dts file for Hisilicon Kirin970 SoC
+ *
+ * Copyright (C) 2016, Hisilicon Ltd.
+ */
+
+#include "hikey970-pinctrl.dtsi"
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/kirin970-clock.h>
+#include <dt-bindings/thermal/thermal.h>
+
+/ {
+	compatible = "hisilicon,kirin970";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+
+	cpus {
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&cpu0>;
+				};
+				core1 {
+					cpu = <&cpu1>;
+				};
+				core2 {
+					cpu = <&cpu2>;
+				};
+				core3 {
+					cpu = <&cpu3>;
+				};
+			};
+			cluster1 {
+				core0 {
+					cpu = <&cpu4>;
+				};
+				core1 {
+					cpu = <&cpu5>;
+				};
+				core2 {
+					cpu = <&cpu6>;
+				};
+				core3 {
+					cpu = <&cpu7>;
+				};
+			};
+		};
+
+		cpu0: cpu@0 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x0>;
+			enable-method = "psci";
+			next-level-cache = <&A53_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER0>;
+			operating-points-v2 = <&cluster0_opp>;
+			cooling-min-level = <6>;
+			cooling-max-level = <0>;
+			#cooling-cells = <2>; /* min followed by max */
+			dynamic-power-coefficient = <88>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
+		};
+
+		cpu1: cpu@1 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x1>;
+			enable-method = "psci";
+			next-level-cache = <&A53_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER0>;
+			operating-points-v2 = <&cluster0_opp>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
+		};
+
+		cpu2: cpu@2 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x2>;
+			enable-method = "psci";
+			next-level-cache = <&A53_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER0>;
+			operating-points-v2 = <&cluster0_opp>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
+		};
+
+		cpu3: cpu@3 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x3>;
+			enable-method = "psci";
+			next-level-cache = <&A53_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_0>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER0>;
+			operating-points-v2 = <&cluster0_opp>;
+			sched-energy-costs = <&CPU_COST_A53 &CLUSTER_COST_A53>;
+		};
+
+		cpu4: cpu@100 {
+			compatible = "arm,cortex-a73", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x100>;
+			enable-method = "psci";
+			next-level-cache = <&A73_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER1>;
+			operating-points-v2 = <&cluster1_opp>;
+			cooling-min-level = <8>;
+			cooling-max-level = <0>;
+			#cooling-cells = <2>; /* min followed by max */
+			dynamic-power-coefficient = <342>;
+			sched-energy-costs = <&CPU_COST_A73 &CLUSTER_COST_A73>;
+		};
+
+		cpu5: cpu@101 {
+			compatible = "arm,cortex-a73", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x101>;
+			enable-method = "psci";
+			next-level-cache = <&A73_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER1>;
+			operating-points-v2 = <&cluster1_opp>;
+			sched-energy-costs = <&CPU_COST_A73 &CLUSTER_COST_A73>;
+		};
+
+		cpu6: cpu@102 {
+			compatible = "arm,cortex-a73", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x102>;
+			enable-method = "psci";
+			next-level-cache = <&A73_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER1>;
+			operating-points-v2 = <&cluster1_opp>;
+			sched-energy-costs = <&CPU_COST_A73 &CLUSTER_COST_A73>;
+		};
+
+		cpu7: cpu@103 {
+			compatible = "arm,cortex-a73", "arm,armv8";
+			device_type = "cpu";
+			reg = <0x0 0x103>;
+			enable-method = "psci";
+			next-level-cache = <&A73_L2>;
+			cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP_1>;
+			clocks = <&stub_clock KIRIN970_CLK_STUB_CLUSTER1>;
+			operating-points-v2 = <&cluster1_opp>;
+			sched-energy-costs = <&CPU_COST_A73 &CLUSTER_COST_A73>;
+		};
+
+		idle-states {
+			entry-method = "psci";
+
+			CPU_SLEEP: cpu-sleep {
+				compatible = "arm,idle-state";
+				local-timer-stop;
+				arm,psci-suspend-param = <0x0010000>;
+				entry-latency-us = <40>;
+				exit-latency-us = <70>;
+				min-residency-us = <3000>;
+			};
+
+			CLUSTER_SLEEP_0: cluster-sleep-0 {
+				compatible = "arm,idle-state";
+				local-timer-stop;
+				arm,psci-suspend-param = <0x1010000>;
+				entry-latency-us = <500>;
+				exit-latency-us = <5000>;
+				min-residency-us = <10000>;
+			};
+
+			CLUSTER_SLEEP_1: cluster-sleep-1 {
+				compatible = "arm,idle-state";
+				local-timer-stop;
+				arm,psci-suspend-param = <0x1010000>;
+				entry-latency-us = <1000>;
+				exit-latency-us = <5000>;
+				min-residency-us = <10000>;
+			};
+		};
+
+		A53_L2: l2-cache0 {
+			compatible = "cache";
+		};
+
+		A73_L2: l2-cache1 {
+			compatible = "cache";
+		};
+
+		/include/ "kirin970-sched-energy.dtsi"
+	};
+
+	cluster0_opp: opp_table0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp00 {
+			opp-hz = /bits/ 64 <509000000>;
+			opp-microvolt = <680000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp01 {
+			opp-hz = /bits/ 64 <1018000000>;
+			opp-microvolt = <754000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp02 {
+			opp-hz = /bits/ 64 <1210000000>;
+			opp-microvolt = <850000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp03 {
+			opp-hz = /bits/ 64 <1402000000>;
+			opp-microvolt = <850000>;
+			clock-latency-ns = <300000>;
+			opp-suspend;
+		};
+
+		opp04 {
+			opp-hz = /bits/ 64 <1556000000>;
+			opp-microvolt = <950000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp05 {
+			opp-hz = /bits/ 64 <1690000000>;
+			opp-microvolt = <950000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp06 {
+			opp-hz = /bits/ 64 <1844000000>;
+			opp-microvolt = <1050000>;
+			clock-latency-ns = <300000>;
+		};
+	};
+
+	cluster1_opp: opp_table1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp10 {
+			opp-hz = /bits/ 64 <682000000>;
+			opp-microvolt = <680000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp11 {
+			opp-hz = /bits/ 64 <1018000000>;
+			opp-microvolt = <780000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp12 {
+			opp-hz = /bits/ 64 <1210000000>;
+			opp-microvolt = <780000>;
+			clock-latency-ns = <2000000>;
+		};
+
+		opp13 {
+			opp-hz = /bits/ 64 <1364000000>;
+			opp-microvolt = <780000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp14 {
+			opp-hz = /bits/ 64 <1498000000>;
+			opp-microvolt = <900000>;
+			clock-latency-ns = <300000>;
+			opp-suspend;
+		};
+
+		opp15 {
+			opp-hz = /bits/ 64 <1652000000>;
+			opp-microvolt = <900000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp16 {
+			opp-hz = /bits/ 64 <1863000000>;
+			opp-microvolt = <900000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp17 {
+			opp-hz = /bits/ 64 <2093000000>;
+			opp-microvolt = <950000>;
+			clock-latency-ns = <300000>;
+		};
+
+		opp18 {
+			opp-hz = /bits/ 64 <2362000000>;
+			opp-microvolt = <1050000>;
+			clock-latency-ns = <300000>;
+		};
+	};
+
+        gic: interrupt-controller@e82b0000 {
+                compatible = "arm,gic-400";
+                #interrupt-cells = <3>;
+                #address-cells = <2>;
+                #size-cells = <2>;
+                ranges;
+                interrupt-controller;
+                redistributor-stride = <0x0 0x30000>;
+                reg = <0x0 0xe82b1000 0x0 0x1000>,      /* GICD */
+                      <0x0 0xe82b2000 0x0 0x1000>;      /* GICC */
+                interrupts = <1 9 0xff04>;
+        };
+
+        timer {
+                compatible = "arm,armv8-timer";
+                interrupt-parent = <&gic>;
+                interrupts = <1 13 0xff08>,
+                             <1 14 0xff08>,
+                             <1 11 0xff08>,
+                             <1 10 0xff08>;
+                clock-frequency = <1920000>;
+        };
+
+	/* isp start */
+	hisiisp: isp@E8400000 {
+		compatible = "hisilicon,hisi-isp","simple-bus";
+		reg = <0x0 0xe8400000 0x0 0x200000>;
+		interrupts = <0 262 4>, <0 266 4>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&isp0_pmx_func &isp1_pmx_func
+			     &isp0_cfg_func &isp1_cfg_func
+			     &cam0_rst_pmx_func &cam1_rst_pmx_func
+			     &cam0_rst_cfg_func &cam1_rst_cfg_func
+			     &cam0_pwd_n_pmx_func &cam1_pwd_n_pmx_func
+			     &cam0_pwd_n_cfg_func &cam1_pwd_n_cfg_func>;
+		clocks = <&crg_ctrl KIRIN970_CLK_GATE_ISP_SNCLK0>,
+		         <&crg_ctrl KIRIN970_CLK_GATE_ISP_SNCLK1>,
+		         <&crg_ctrl KIRIN970_CLK_GATE_ISP_SNCLK2>;
+		clock-names = "clk_gate_isp_snclk0",
+			      "clk_gate_isp_snclk1",
+			      "clk_gate_isp_snclk2";
+		clock-rates = <24000000>;
+		DOVDD-supply = <&ldo4>;
+		pool-size = <0x1000000>;
+		status = "ok";
+
+		hisi,ov5645 {
+		compatible = "hisilicon,ov5645";
+			sensor_index = <0>;
+			pwdn-gpio = <&gpio6 5 1>;
+			reset-gpio = <&gpio1 5 1>;
+			status = "ok";
+		};
+
+		hisi,ov5640_main {
+			compatible = "hisilicon,ov5640_main";
+			sensor_index = <0>;
+			pwdn-gpio = <&gpio6 5 1>;
+			reset-gpio = <&gpio1 5 1>;
+			status = "ok";
+		};
+
+		hisi,ov5640_sub {
+			compatible = "hisilicon,ov5640_sub";
+			sensor_index = <1>;
+			pwdn-gpio = <&gpio3 7 1>;
+			reset-gpio = <&gpio4 0 1>;
+			status = "ok";
+		};
+        };
+
+	ddr_devfreq {
+		compatible = "hisilicon,kirin970-ddrfreq";
+		clocks = <&stub_clock KIRIN970_CLK_STUB_DDR_VOTE>,
+			<&stub_clock KIRIN970_CLK_STUB_DDR>,
+			<&stub_clock KIRIN970_CLK_STUB_DDR_LIMIT>;
+		operating-points = <
+			/* kHz uV */
+			415000  0
+			830000  0
+			1244000 0
+			1866000 0
+		>;
+	};
+
+	soc {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		crg_ctrl: crg_ctrl@fff35000 {
+			compatible = "hisilicon,kirin970-crgctrl", "syscon";
+			reg = <0x0 0xfff35000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		crg_rst: crg_rst_controller {
+			compatible = "hisilicon,hi3660-reset";
+			#reset-cells = <2>;
+			hisi,rst-syscon = <&crg_ctrl>;
+		};
+
+		pctrl: pctrl@e8a09000 {
+			compatible = "hisilicon,kirin970-pctrl", "syscon";
+			reg = <0x0 0xe8a09000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		pmuctrl: crg_ctrl@fff34000 {
+			compatible = "hisilicon,kirin970-pmuctrl", "syscon";
+			reg = <0x0 0xfff34000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		sctrl: sctrl@fff0a000 {
+			compatible = "hisilicon,kirin970-sctrl", "syscon";
+			reg = <0x0 0xfff0a000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		pmctrl: pmctrl@fff31000 {
+			compatible = "hisilicon,kirin970-pmctrl", "syscon";
+			reg = <0x0 0xfff31000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		iomcu: iomcu@ffd7e000 {
+			compatible = "hisilicon,kirin970-iomcu", "syscon";
+			reg = <0x0 0xffd7e000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		media1_crg: media1_crgctrl@E87FF000 {
+			compatible = "hisilicon,media1-crg", "syscon";
+			reg = <0x0 0xE87FF000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		media2_crg: media2_crgctrl@E8900000 {
+			compatible = "hisilicon,media2-crg","syscon";
+			reg = <0x0 0xE8900000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		iomcu_rst: reset {
+			compatible = "hisilicon,hi3660-reset";
+			hisi,rst-syscon = <&iomcu>;
+			#reset-cells = <2>;
+		};
+
+		stub_clock: stub_clock {
+			compatible = "hisilicon,kirin970-stub-clk";
+			reg = <0x0 0xe896b500 0x0 0x0100>,
+			      <0x0 0xfff31000 0x0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		can_clk: can_clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <16000000>;
+		};
+
+		uart0: serial@fdf02000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfdf02000 0x0 0x1000>;
+			interrupts = <0 74 4>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_UART0>,
+				 <&crg_ctrl KIRIN970_CLK_GATE_UART0>;
+			clock-names = "uartclk", "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&uart0_pmx_func &uart0_cfg_func>;
+			status = "disabled";
+		};
+
+		uart1: serial@fdf00000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfdf00000 0x0 0x1000>;
+			interrupts = <0 75 4>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_UART1>,
+				 <&crg_ctrl KIRIN970_CLK_GATE_UART1>;
+			clock-names = "uartclk", "apb_pclk";
+			status = "disabled";
+		};
+
+		uart2: serial@fdf03000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfdf03000 0x0 0x1000>;
+			interrupts = <0 76 4>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_UART2>,
+				 <&crg_ctrl KIRIN970_CLK_GATE_UART2>;
+			clock-names = "uartclk", "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&uart2_pmx_func &uart2_cfg_func>;
+			status = "disabled";
+		};
+
+		uart3: serial@ffd74000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xffd74000 0x0 0x1000>;
+			interrupts = <0 114 4>;
+			clocks = <&iomcu KIRIN970_CLK_GATE_UART3>,
+			         <&iomcu KIRIN970_CLK_GATE_UART3>;
+			clock-names = "uartclk", "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&uart3_pmx_func &uart3_cfg_func>;
+			status = "disabled";
+		};
+
+		uart4: serial@fdf01000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfdf01000 0x0 0x1000>;
+			interrupts = <0 77 4>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_UART4>,
+			         <&crg_ctrl KIRIN970_CLK_GATE_UART4>;
+			clock-names = "uartclk", "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&uart4_pmx_func &uart4_cfg_func>;
+			status = "disabled";
+		};
+
+		uart5: serial@fdf05000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfdf05000 0x0 0x1000>;
+			interrupts = <0 78 4>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_UART5>,
+			         <&crg_ctrl KIRIN970_CLK_GATE_UART5>;
+			clock-names = "uartclk", "apb_pclk";
+			status = "disabled";
+		};
+
+		uart6: serial@fff32000 {
+			compatible = "arm,pl011", "arm,primecell";
+			reg = <0x0 0xfff32000 0x0 0x1000>;
+			interrupts = <0 79 4>;
+			clocks = <&crg_ctrl KIRIN970_CLK_UART6>,
+			         <&crg_ctrl KIRIN970_PCLK>;
+			clock-names = "uartclk", "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&uart6_pmx_func &uart6_cfg_func>;
+			status = "disabled";
+		};
+
+		dma0: dma@fdf30000 {
+			compatible = "hisilicon,hisi-dma64-1.0";
+			reg = <0x0 0xfdf30000 0x0 0x1000>;
+			#dma-cells = <1>;
+			dma-channels = <16>;
+			dma-requests = <32>;
+			dma-min-chan = <1>;
+			interrupts = <0 143 4>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_DMAC>,
+				<&crg_ctrl KIRIN970_PCLK>;
+			clock-names = "clk_dmac", "apb_pclk";
+			status = "ok";
+		};
+
+		tsensor: tsensor {
+			compatible = "hisilicon,kirin970-tsensor";
+			reg = <0x0 0xfff30000 0x0 0x1000>;
+			interrupts = <GIC_SPI 145 IRQ_TYPE_LEVEL_HIGH>;
+			#thermal-sensor-cells = <1>;
+		};
+
+		/*
+		thermal-zones {
+
+			cls0: cls0 {
+				polling-delay = <1000>;
+				polling-delay-passive = <25>;
+				sustainable-power = <4000>;
+
+				thermal-sensors = <&tsensor 1>;
+
+				trips {
+					threshold: trip-point@0 {
+						temperature = <65000>;
+						hysteresis = <1000>;
+						type = "passive";
+					};
+
+					target: trip-point@1 {
+						temperature = <75000>;
+						hysteresis = <1000>;
+						type = "passive";
+					};
+				};
+
+				cooling-maps {
+					map0 {
+						trip = <&target>;
+						contribution = <1024>;
+						cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+					map1 {
+						trip = <&target>;
+						contribution = <512>;
+						cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+					map2 {
+						trip = <&target>;
+						contribution = <1024>;
+						cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					};
+				};
+			};
+		};
+		*/
+		gpio0: gpio@e8a0b000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell0";
+			reg = <0 0xe8a0b000 0 0x1000>;
+			interrupts = <0 84 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 1 0 1 &pmx0 3 1 5>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO0>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio1: gpio@e8a0c000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell1";
+			reg = <0 0xe8a0c000 0 0x1000>;
+			interrupts = <0 85 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO1>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio2: gpio@e8a0d000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell2";
+			reg = <0 0xe8a0d000 0 0x1000>;
+			interrupts = <0 86 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 1 6 7>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO2>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio3: gpio@e8a0e000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell3";
+			reg = <0 0xe8a0e000 0 0x1000>;
+			interrupts = <0 87 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges =  <&pmx0 0 13 4 &pmx0 7 17 1>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO3>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio4: gpio@e8a0f000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell4";
+			reg = <0 0xe8a0f000 0 0x1000>;
+			interrupts = <0 88 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 18 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO4>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio5: gpio@e8a10000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell5";
+			reg = <0 0xe8a10000 0 0x1000>;
+			interrupts = <0 89 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 26 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO5>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio6: gpio@e8a11000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell6";
+			reg = <0 0xe8a11000 0 0x1000>;
+			interrupts = <0 90 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 1 34 7>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO6>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio7: gpio@e8a12000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell7";
+			reg = <0 0xe8a12000 0 0x1000>;
+			interrupts = <0 91 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 41 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO7>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio8: gpio@e8a13000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell8";
+			reg = <0 0xe8a13000 0 0x1000>;
+			interrupts = <0 92 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 49 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO8>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio9: gpio@e8a14000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell9";
+			reg = <0 0xe8a14000 0 0x1000>;
+			interrupts = <0 93 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 57 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO9>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio10: gpio@e8a15000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell10";
+			reg = <0 0xe8a15000 0 0x1000>;
+			interrupts = <0 94 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 65 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO10>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio11: gpio@e8a16000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell11";
+			reg = <0 0xe8a16000 0 0x1000>;
+			interrupts = <0 95 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 73 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO11>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio12: gpio@e8a17000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell12";
+			reg = <0 0xe8a17000 0 0x1000>;
+			interrupts = <0 96 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx0 0 81 1>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO12>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio13: gpio@e8a18000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell13";
+			reg = <0 0xe8a18000 0 0x1000>;
+			interrupts = <0 97 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO13>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio14: gpio@e8a19000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell14";
+			reg = <0 0xe8a19000 0 0x1000>;
+			interrupts = <0 98 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO14>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio15: gpio@e8a1a000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell15";
+			reg = <0 0xe8a1a000 0 0x1000>;
+			interrupts = <0 99 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO15>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio16: gpio@e8a1b000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell16";
+			reg = <0 0xe8a1b000 0 0x1000>;
+			interrupts = <0 100 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx5 0 0 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO16>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio17: gpio@e8a1c000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell17";
+			reg = <0 0xe8a1c000 0 0x1000>;
+			interrupts = <0 101 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx5 0 8 2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO17>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio18: gpio@fff28000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell18";
+			reg = <0 0xfff28000 0 0x1000>;
+			interrupts = <0 102 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx1 4 42 4>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_GPIO18>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio19: gpio@fff29000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell19";
+			reg = <0 0xfff29000 0 0x1000>;
+			interrupts = <0 103 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx1 0 61 2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_GPIO19>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio20: gpio@e8a1f000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell20";
+			reg = <0 0xe8a1f000 0 0x1000>;
+			interrupts = <0 104 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx7 0 0 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO20>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio21: gpio@e8a20000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell21";
+			reg = <0 0xe8a20000 0 0x1000>;
+			interrupts = <0 105 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			gpio-ranges = <&pmx7 0 8 4>;
+			clocks = <&crg_ctrl KIRIN970_PCLK_GPIO21>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio22: gpio@fff0b000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell22";
+			reg = <0 0xfff0b000 0 0x1000>;
+			interrupts = <0 106 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			/* GPIO176 */
+			gpio-ranges = <&pmx1 2 0 6>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_AO_GPIO0>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio23: gpio@fff0c000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell23";
+			reg = <0 0xfff0c000 0 0x1000>;
+			interrupts = <0 107 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			/* GPIO184 */
+			gpio-ranges = <&pmx1 0 6 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_AO_GPIO1>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		 gpio24: gpio@fff0d000 {
+			compatible = "arm,pl061", "arm,primecell", "hisi,poweroff", "arm,primecell24";
+			reg = <0 0xfff0d000 0 0x1000>;
+			interrupts = <0 108 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			/* GPIO192 */
+			gpio-ranges = <&pmx1 0 14 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_AO_GPIO2>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio25: gpio@fff0e000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell25";
+			reg = <0 0xfff0e000 0 0x1000>;
+			interrupts = <0 109 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			/* GPIO200 */
+			gpio-ranges = <&pmx1 0 22 8>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_AO_GPIO3>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio26: gpio@fff0f000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell26";
+			reg = <0 0xfff0f000 0 0x1000>;
+			interrupts = <0 110 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			/* GPIO208 */
+			gpio-ranges = <&pmx1 0 30 1>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_AO_GPIO4>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio27: gpio@fff10000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell27";
+			reg = <0 0xfff10000 0 0x1000>;
+			interrupts = <0 111 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			/* GPIO216 */
+			gpio-ranges = <&pmx1 4 31 4>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_AO_GPIO5>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		gpio28: gpio@fff1d000 {
+			compatible = "arm,pl061", "arm,primecell", "arm,primecell28";
+			reg = <0 0xfff1d000 0 0x1000>;
+			interrupts = <0 141 0x4>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pmx1 1 35 7>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			clocks = <&sctrl KIRIN970_PCLK_AO_GPIO6>;
+			clock-names = "apb_pclk";
+			status = "ok";
+		};
+
+		its_pcie: interrupt-controller@0xf4000000 {
+			compatible = "arm,gic-v3-its";
+			msi-controller;
+			reg = <0x0 0xf5100000 0x0 0x100000>;
+		};
+
+		pcie@f4000000 {
+			compatible = "hisilicon,hikey970";
+			reg = <0x0 0xf4000000 0x0 0x1000000>,
+			      <0x0 0xfc180000 0x0    0x1000>,
+			      <0x0 0xfc000000 0x0   0x80000>,
+			      <0x0 0xf5000000 0x0    0x2000>;
+			reg-names = "dbi", "apb", "phy", "config";
+			bus-range = <0x0  0x1>;
+			msi-parent = <&its_pcie>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			device_type = "pci";
+			ranges = <0x02000000 0x0 0x00000000
+				  0x0 0xf6000000
+				  0x0 0x02000000>;
+			num-lanes = <1>;
+			interrupts = <0 283 4>;
+			interrups-names = "msi";
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 7>;
+			interrupt-map = <0 0 0 1
+					 &gic 0 0 0 282 IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 2
+					 &gic 0 0 0 283 IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 3
+					 &gic 0 0 0 284 IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 4
+					 &gic 0 0 0 285 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_PCIEAUX>,
+				 <&crg_ctrl KIRIN970_PCLK_GATE_PCIE_PHY>,
+				 <&crg_ctrl KIRIN970_PCLK_GATE_PCIE_SYS>,
+				 <&crg_ctrl KIRIN970_ACLK_GATE_PCIE>;
+			clock-names = "pcie_aux", "pcie_apb_phy",
+				      "pcie_apb_sys", "pcie_aclk";
+			switch,reset-gpios = <&gpio7 0 0 >;
+			eth,reset-gpios = <&gpio25 2 0 >;
+			m_2,reset-gpios = <&gpio3 1 0 >;
+			mini1,reset-gpios = <&gpio27 4 0 >;
+
+			eth,clkreq-gpios = <&gpio20 6 0 >;
+			m_2,clkreq-gpios = <&gpio27 3 0 >;
+			mini1,clkreq-gpios = <&gpio17 0 0 >;
+
+			/*vboost iboost pre post main*/
+			eye_param = <0xFFFFFFFF 0xFFFFFFFF 0xFFFFFFFF 0xFFFFFFFF 0xFFFFFFFF>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&pcie_clkreq_pmx_func &pcie_clkreq_cfg_func>;
+		};
+
+		ufs: ufs@ff3c0000 {
+			compatible = "hisilicon,kirin970-ufs", "jedec,ufs-2.1";
+			/* 0: HCI standard */
+			/* 1: UFS SYS CTRL */
+			reg = <0x0 0xff3c0000 0x0 0x20000>,
+				<0x0 0xff3e0000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_SPI 278 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&sctrl KIRIN970_CLK_GATE_UFSIO_REF>;
+			clock-names = "ref_clk";
+			freq-table-hz = <0 0>;
+			ufs-kirin-phy10nm-support;
+		};
+
+		/* SD */
+		dwmmc1: dwmmc1@ff37f000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			cd-inverted;
+			compatible = "hisilicon,hi3670-dw-mshc";
+			num-slots = <1>;
+			bus-width = <0x4>;
+			disable-wp;
+			cap-sd-highspeed;
+			supports-highspeed;
+			card-detect-delay = <200>;
+			reg = <0x0 0xff37f000 0x0 0x1000>;
+			interrupts = <GIC_SPI 139 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_SD>,
+				 <&crg_ctrl KIRIN970_HCLK_GATE_SD>;
+			clock-names = "ciu", "biu";
+			clock-frequency = <3200000>;
+			resets = <&crg_rst 0x94 18>;
+			reset-names = "reset";
+			cd-gpios = <&gpio25 5 0>;
+			hisilicon,peripheral-syscon = <&sctrl>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&sd_pmx_func
+				     &sd_clk_cfg_func
+				     &sd_cfg_func>;
+			sd-uhs-sdr12;
+			sd-uhs-sdr25;
+			sd-uhs-sdr50;
+			sd-uhs-sdr104;
+			status = "disabled";
+
+			slot@0 {
+				reg = <0x0>;
+				bus-width = <4>;
+				disable-wp;
+			};
+		};
+
+		/* SDIO */
+		dwmmc2: dwmmc2@FC183000 {
+			compatible = "hisilicon,hi3670-dw-mshc";
+			reg = <0x0 0xFC183000 0x0 0x1000>;
+			interrupts = <GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>;
+			num-slots = <1>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_SDIO>,
+				 <&crg_ctrl KIRIN970_HCLK_GATE_SDIO>;
+			clock-names = "ciu", "biu";
+			resets = <&crg_rst 0x94 20>;
+			reset-names = "reset";
+			card-detect-delay = <200>;
+			supports-highspeed;
+			keep-power-in-suspend;
+			pinctrl-names = "default";
+			pinctrl-0 = <&sdio_pmx_func
+				     &sdio_clk_cfg_func
+				     &sdio_cfg_func>;
+			status = "disabled";
+		};
+
+		spi0: spi@ffd70000 {
+			compatible = "arm,pl022", "arm,primecell";
+			reg = <0x0 0xffd70000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <GIC_SPI 113 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&iomcu KIRIN970_CLK_GATE_SPI0>;
+			clock-names = "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi0_pmx_func &spi0_cfg_func &spi0_clk_cfg_func>;
+			num-cs = <1>;
+			cs-gpios = <&gpio28 6 0>;
+			status = "ok";
+
+			can0: can@0 {
+				compatible = "microchip,mcp2515";
+				reg = <0>;
+				clocks = <&can_clk>;
+				interrupt-parent = <&gpio18>;
+				interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
+				spi-max-frequency = <10000000>;
+				can-rst = <&gpio6 2 0>;
+				status = "ok";
+			};
+		};
+
+		spi2: spi@ffd68000 {
+			compatible = "arm,pl022", "arm,primecell";
+			reg = <0x0 0xffd68000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <GIC_SPI 116 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&iomcu KIRIN970_CLK_GATE_SPI2>;
+			clock-names = "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi2_pmx_func &spi2_cfg_func &spi2_clk_cfg_func>;
+			num-cs = <1>;
+			cs-gpios = <&gpio27 0 0>;
+			status = "disabled";
+		};
+
+		spi3: spi@fff2a000 {
+			compatible = "arm,pl022", "arm,primecell";
+			reg = <0x0 0xfff2a000 0x0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <GIC_SPI 312 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&sctrl KIRIN970_CLK_GATE_SPI>;
+			clock-names = "apb_pclk";
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi3_pmx_func &spi3_cfg_func &spi3_clk_cfg_func>;
+			num-cs = <1>;
+			cs-gpios = <&gpio18 3 0>;
+			status = "disabled";
+		};
+
+		i2c0: i2c@ffd71000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xffd71000 0x0 0x1000>;
+			interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&iomcu KIRIN970_CLK_GATE_I2C0>;
+			resets = <&iomcu_rst 0x20 3>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c0_pmx_func &i2c0_cfg_func>;
+			status = "disabled";
+		};
+
+		i2c1: i2c@ffd72000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xffd72000 0x0 0x1000>;
+			interrupts = <GIC_SPI 119 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&iomcu KIRIN970_CLK_GATE_I2C1>;
+			resets = <&iomcu_rst 0x20 4>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c1_pmx_func &i2c1_cfg_func>;
+			status = "disabled";
+
+			rt1711@4e {
+				compatible = "richtek,rt1711";
+				reg = <0x4e>;
+				status = "ok";
+				rt1711,irq_pin = <&gpio27 5 0>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&pd_cfg_func>;
+				/* 0: dfp/ufp, 1: dfp, 2: ufp */
+				rt-dual,supported_modes = <0>;
+				/* tcpc_device's name */
+				rt-tcpc,name = "type_c_port0";
+				/* 0: SNK Only, 1: SRC Only, 2: DRP, 3: Try.SRC, 4: Try.SNK */
+				rt-tcpc,role_def = <2>;
+				/* 0: Default, 1: 1.5, 2: 3.0 */
+				rt-tcpc,rp_level = <0>;
+				/* the number of notifier supply */
+				rt-tcpc,notifier_supply_num = <0>;
+				pd-data {
+					pd,source-pdo-size = <1>;
+					/*<0x019014>;*/
+					pd,source-pdo-data = <0x00019064>;
+
+					pd,sink-pdo-size = <2>;
+					/* 0x0002d0c8 : 9V, 2A */
+					pd,sink-pdo-data = <0x000190c8 0x0002d0c8> ;
+
+					pd,id-vdo-size = <3>;
+					pd,id-vdo-data = <0xd00029cf 0x0 0x00010000>;
+				};
+
+				dpm_caps {
+					local_dr_power;
+					local_dr_data;
+					// local_ext_power;
+					local_usb_comm;
+					// local_usb_suspend;
+					// local_high_cap;
+					// local_give_back;
+					// local_no_suspend;
+					local_vconn_supply;
+
+					// attemp_enter_dp_mode;
+					attemp_discover_cable;
+					attemp_discover_id;
+
+					/* 0: disable, 1: prefer_snk, 2: prefer_src */
+					pr_check = <0>;
+					// pr_reject_as_source;
+					// pr_reject_as_sink;
+					pr_check_gp_source;
+					// pr_check_gp_sink;
+
+					/* 0: disable, 1: prefer_ufp, 2: prefer_dfp */
+					dr_check = <0>;
+					// dr_reject_as_dfp;
+					// dr_reject_as_ufp;
+
+					snk_prefer_low_voltage;
+					snk_ignore_mismatch_current;
+				};
+			};
+
+		};
+
+		i2c2: i2c@ffd73000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xffd73000 0x0 0x1000>;
+			interrupts = <GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&iomcu KIRIN970_CLK_GATE_I2C2>;
+			resets = <&iomcu_rst 0x20 5>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c2_pmx_func &i2c2_cfg_func>;
+			status = "disabled";
+		};
+
+		i2c3: i2c@fdf0c000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xfdf0c000 0x0 0x1000>;
+			interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_I2C3>;
+			resets = <&crg_rst 0x78 7>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c3_pmx_func &i2c3_cfg_func>;
+			status = "disabled";
+		};
+
+		i2c4: i2c@fdf0d000 {
+			compatible = "snps,designware-i2c";
+			reg = <0x0 0xfdf0d000 0x0 0x1000>;
+			interrupts = <GIC_SPI 82 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_I2C4>;
+			resets = <&crg_rst 0x78 27>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c4_pmx_func &i2c4_cfg_func>;
+			status = "disabled";
+			/*
+			adv7533: adv7533@39 {
+				status = "ok";
+				compatible = "adi,adv7533";
+				reg = <0x39>;
+				v1p2-supply = <&ldo3>;
+				vdd-supply = <&ldo3>;
+				interrupt-parent = <&gpio1>;
+				interrupts = <1 2>;
+				pd-gpio = <&gpio27 1 0>;
+				sel-gpio = <&gpio25 7 0>;
+				adi,dsi-lanes = <4>;
+				adi,disable-timing-generator;
+				#sound-dai-cells = <0>;
+
+				port {
+					adv7533_in: endpoint {
+						remote-endpoint = <&dsi_out0>;
+					};
+				};
+			};
+			*/
+		};
+
+		hisi_pd: pd_dpm {
+			compatible = "hisilicon,pd_dpm";
+			tcp_name = "type_c_port0";
+			status = "ok";
+		};
+
+		hikey_usbhub: hikey_usbhub {
+			compatible = "hisilicon,kirin970_hikey_usbhub";
+			typc_vbus_int_gpio,typec-gpios = <&gpio26 1 0>;
+			typc_vbus_enable_val = <1>;
+			otg_gpio = <&gpio4 2 0>;
+			hub_reset_en_gpio = <&gpio0 3 0>;
+			hub-vdd-supply = <&ldo17>;
+		};
+
+		usb31_misc: usb31_misc@ff200000 {
+			compatible = "syscon";
+			reg = <0x0 0xff200000 0x0 0x1000>;
+		};
+
+		usb31_misc_rst: usb31_misc_rst_controller {
+			compatible = "hisilicon,kirin970-usb31-misc-reset";
+			#reset-cells = <2>;
+			hisi,rst-syscon = <&usb31_misc>;
+		};
+
+		usb_phy: usbphy {
+			compatible = "hisilicon,kirin970-usb-phy";
+			#phy-cells = <0>;
+			hisilicon,pericrg-syscon = <&crg_ctrl>;
+			hisilicon,pctrl-syscon = <&pctrl>;
+			hisilicon,sctrl-syscon = <&sctrl>;
+			hisilicon,usb31-misc-syscon = <&usb31_misc>;
+			eye-diagram-param = <0xFDFEE4>;
+			usb3-phy-tx-vboost-lvl = <0x5>;
+		};
+
+		usb3: hisi_dwc3 {
+			compatible = "hisilicon,kirin970-dwc3";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			clocks = <&crg_ctrl KIRIN970_CLK_GATE_ABB_USB>,
+				 <&crg_ctrl KIRIN970_HCLK_GATE_USB3OTG>,
+				 <&crg_ctrl KIRIN970_CLK_GATE_USB3OTG_REF>,
+				 <&crg_ctrl KIRIN970_ACLK_GATE_USB3DVFS>;
+			clock-names = "clk_gate_abb_usb",
+				      "hclk_gate_usb3otg",
+				      "clk_gate_usb3otg_ref",
+				      "aclk_gate_usb3dvfs";
+			assigned-clocks = <&crg_ctrl KIRIN970_ACLK_GATE_USB3DVFS>;
+			assigned-clock-rates = <238000000>;
+			resets = <&crg_rst 0x90 6>,
+				 <&crg_rst 0x90 7>,
+				 <&usb31_misc_rst 0xA0 8>,
+				 <&usb31_misc_rst 0xA0 9>;
+
+			dwc3: dwc3@ff100000 {
+				compatible = "snps,dwc3";
+				reg = <0x0 0xff100000 0x0 0x100000>;
+				interrupts = <0 159 4>, <0 161 4>;
+				phys = <&usb_phy>;
+				phy-names = "usb3-phy";
+				dr_mode = "otg";
+				maximum-speed = "super-speed";
+				phy_type = "utmi";
+				snps,dis-del-phy-power-chg-quirk;
+				snps,dis_u2_susphy_quirk;
+				snps,dis_u3_susphy_quirk;
+				snps,tx_de_emphasis_quirk;
+				snps,tx_de_emphasis = <1>;
+				snps,dis-split-quirk;
+				snps,gctl-reset-quirk;
+				extcon = <&hisi_pd>;
+			};
+		};
+		i2s2: hisi_i2s {
+			compatible = "hisilicon,hisi-i2s";
+			reg = <0x0 0xe804f800 0x0 0x400>,
+			      <0x0 0xe804e000 0x0 0x400>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2s2_pmx_func &i2s2_cfg_func>;
+			dmas = <&asp_dmac 18 &asp_dmac 19>;
+			dma-names = "rx", "tx";
+			#sound-dai-cells = <0>;
+		};
+
+		asp_dmac: asp_dmac@E804B000 {
+			compatible = "hisilicon,hisi-pcm-asp-dma";
+			reg = <0x0 0xe804b000 0x0 0x1000>;
+			#dma-cells = <1>;
+			dma-channels = <16>;
+			dma-requests = <32>;
+			dma-min-chan = <0>;
+			dma-used-chans = <0xFFFE>;
+			dma-share;
+			interrupts = <0 216 4>;
+			interrupt-names = "asp_dma_irq";
+			status = "ok";
+		};
+		/*
+		sound {
+			compatible = "simple-audio-card";
+			simple-audio-card,name = "hikey-hdmi";
+			simple-audio-card,format = "i2s";
+
+			simple-audio-card,bitclock-master = <&sound_master>;
+			simple-audio-card,frame-master = <&sound_master>;
+
+			sound_master: simple-audio-card,cpu {
+				sound-dai = <&i2s2>;
+			};
+
+			simple-audio-card,codec {
+				sound-dai = <&adv7533>;
+			};
+		};
+		*/
+	};
+};

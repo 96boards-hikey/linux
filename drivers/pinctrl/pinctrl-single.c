@@ -2028,7 +2028,18 @@ static struct platform_driver pcs_driver = {
 #endif
 };
 
-module_platform_driver(pcs_driver);
+static int __init pinctrl_single_init(void)
+{
+	return platform_driver_register(&pcs_driver);
+}
+
+static void __exit pinctrl_single_exit(void)
+{
+	platform_driver_unregister(&pcs_driver);
+}
+
+arch_initcall(pinctrl_single_init);
+module_exit(pinctrl_single_exit);
 
 MODULE_AUTHOR("Tony Lindgren <tony@atomide.com>");
 MODULE_DESCRIPTION("One-register-per-pin type device tree based pinctrl driver");

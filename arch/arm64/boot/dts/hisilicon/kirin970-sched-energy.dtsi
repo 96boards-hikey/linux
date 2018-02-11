@@ -1,0 +1,82 @@
+/*
+ * Kirin970 specific energy cost model data. There are no unit
+ * requirements for the data. Data can be normalized to any
+ * reference point, but the normalization must be consistent.
+ * That is, one bogo-joule/watt must be the same quantity for
+ * all data, but we don't care what it is.
+ */
+
+energy-costs {
+	CPU_COST_A73: core-cost0 {
+		busy-cost-data = <
+			296   236
+			441   320
+			524   353
+			591   379
+			649   483
+			716   517
+			807   564
+			907   778
+			1024  1105
+		>;
+		idle-cost-data = <
+			83
+			83
+			0
+			0
+		>;
+	};
+	CPU_COST_A53: core-cost1 {
+		busy-cost-data = <
+			113    65
+			226    104
+			269    138
+			311    154
+			350    206
+			355    219
+			360    283
+		>;
+		idle-cost-data = <
+			23
+			23
+			0
+			0
+		>;
+	};
+	CLUSTER_COST_A73: cluster-cost0 {
+		busy-cost-data = <
+			296   69
+			441   81
+			524   85
+			591   89
+			649   105
+			716   111
+			807   118
+			907   159
+			1024  218
+		>;
+		idle-cost-data = <
+			44
+			44
+			44
+			0
+		>;
+	};
+	CLUSTER_COST_A53: cluster-cost1 {
+		busy-cost-data = <
+			113    23
+			226    30
+			269    36
+			311    39
+			350    50
+			355    53
+			360    55
+		>;
+		idle-cost-data = <
+			14
+			14
+			14
+			0
+		>;
+	};
+};

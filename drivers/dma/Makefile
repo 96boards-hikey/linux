@@ -68,6 +68,7 @@ obj-$(CONFIG_TI_EDMA) += edma.o
 obj-$(CONFIG_XGENE_DMA) += xgene-dma.o
 obj-$(CONFIG_ZX_DMA) += zx296702_dma.o
 obj-$(CONFIG_HISI_ASP_DMA) += hisi_asp_dma.o
+obj-$(CONFIG_HISI_DMA) += hisi_dma_64.o
 
 obj-y += qcom/
 obj-y += xilinx/
