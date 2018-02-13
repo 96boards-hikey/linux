@@ -49,9 +49,6 @@
 #define TIMING_MODE     3
 #define TIMING_CFG_NUM 10
 
-#define PULL_DOWN BIT(1)
-#define PULL_UP   BIT(0)
-
 #define NUM_PHASES (40)
 
 #define ENABLE_SHIFT_MIN_SMPL (4)
@@ -78,7 +75,7 @@ struct hs_timing {
 	u32 smpl_phase_min;
 };
 
-struct hs_timing hs_timing_cfg[TIMING_MODE][TIMING_CFG_NUM] = {
+static struct hs_timing hs_timing_cfg[TIMING_MODE][TIMING_CFG_NUM] = {
 	{ /* reserved */ },
 	{ /* SD */
 		{7, 0, 15, 15,},  /* 0: LEGACY 400k */
@@ -297,7 +294,7 @@ static int dw_mci_set_sel18(struct dw_mci *host, bool set)
 	return 0;
 }
 
-void dw_mci_hi3660_set_ios(struct dw_mci *host, struct mmc_ios *ios)
+static void dw_mci_hi3660_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 {
 	int ret;
 	unsigned long wanted;
@@ -339,9 +336,10 @@ static int dw_mci_get_best_clksmpl(unsigned int sample_flag)
 
 	i = ffs(sample_flag) - 1;
 
-	/*A clock cycle is divided into 32 phases,
-	 *each of which is represented by a bit,
-	 *finding the optimal phase.
+	/*
+	 * A clock cycle is divided into 32 phases,
+	 * each of which is represented by a bit,
+	 * finding the optimal phase.
 	 */
 	while (i < 32) {
 		v = ror32(sample_flag, i);
@@ -403,9 +401,7 @@ static int dw_mci_hi3660_execute_tuning(struct dw_mci_slot *slot, u32 opcode)
 static int dw_mci_hi3660_switch_voltage(struct mmc_host *mmc,
 					struct mmc_ios *ios)
 {
-	int ret;
-	int min_uv = 0;
-	int max_uv = 0;
+	int ret = 0;
 	struct dw_mci_slot *slot = mmc_priv(mmc);
 	struct k3_priv *priv;
 	struct dw_mci *host;
@@ -419,29 +415,24 @@ static int dw_mci_hi3660_switch_voltage(struct mmc_host *mmc,
 	if (priv->ctrl_id == DWMMC_SDIO_ID)
 		return 0;
 
-	if (ios->signal_voltage == MMC_SIGNAL_VOLTAGE_330) {
+	if (ios->signal_voltage == MMC_SIGNAL_VOLTAGE_330)
 		ret = dw_mci_set_sel18(host, 0);
-		if (ret)
-			return ret;
-		min_uv = 2950000;
-		max_uv = 2950000;
-	} else if (ios->signal_voltage == MMC_SIGNAL_VOLTAGE_180) {
+	else if (ios->signal_voltage == MMC_SIGNAL_VOLTAGE_180)
 		ret = dw_mci_set_sel18(host, 1);
-		if (ret)
-			return ret;
-		min_uv = 1800000;
-		max_uv = 1800000;
-	}
+	else
+		dev_err(host->dev, "voltage not supported\n");
 
-	if (IS_ERR_OR_NULL(mmc->supply.vqmmc))
-		return 0;
-
-	ret = regulator_set_voltage(mmc->supply.vqmmc, min_uv, max_uv);
-	if (ret) {
-		dev_err(host->dev, "Regulator set error %d: %d - %d\n",
-			ret, min_uv, max_uv);
+	if (ret)
 		return ret;
+
+	if (!IS_ERR(mmc->supply.vqmmc)) {
+		ret = mmc_regulator_set_vqmmc(mmc, ios);
+		if (ret) {
+			dev_err(host->dev, "Regulator set error %d\n", ret);
+			return ret;
+		}
 	}
+
 	return 0;
 }
 
@@ -454,6 +445,7 @@ static const struct dw_mci_drv_data hi3660_data = {
 };
 
 static const struct of_device_id dw_mci_k3_match[] = {
+	{ .compatible = "hisilicon,hi3670-dw-mshc", .data = &hi3660_data, },
 	{ .compatible = "hisilicon,hi3660-dw-mshc", .data = &hi3660_data, },
 	{ .compatible = "hisilicon,hi4511-dw-mshc", .data = &k3_drv_data, },
 	{ .compatible = "hisilicon,hi6220-dw-mshc", .data = &hi6220_data, },

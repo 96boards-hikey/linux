@@ -1,0 +1,41 @@
+Hisilicon USB31 Misc Reset Controller
+======================================
+
+Please also refer to reset.txt in this directory for common reset
+controller binding usage.
+
+The reset controller registers are part of the system-ctl block on
+Kirin970 SoC.
+
+Required properties:
+- compatible: should be
+		 "hisilicon,kirin970-usb31-misc-reset"
+- hisi,rst-syscon: phandle of the reset's syscon.
+- #reset-cells : Specifies the number of cells needed to encode a
+  reset source.  The type shall be a <u32> and the value shall be 2.
+
+	 Cell #1 : offset of the reset assert control
+	           register from the syscon register base
+	 Cell #2 : bit position of the reset in the reset control register
+
+Example:
+	usb31_misc: usb31_misc@ff200000 {
+		compatible = "syscon";
+		reg = <0x0 0xff200000 0x0 0x1000>;
+	};
+
+	usb31_misc_rst: usb31_misc_rst_controller {
+		compatible = "hisilicon,kirin970-usb31-misc-reset";
+		#reset-cells = <2>;
+		hisi,rst-syscon = <&usb31_misc>;
+	};
+
+Specifying reset lines connected to IP modules
+==============================================
+example:
+
+        usb3: hisi_dwc3@..... {
+                ...
+		resets = <&usb31_misc_rst 0xA0 8>; /* offset: 0xA0; bit: 8 */
+                ...
+        };

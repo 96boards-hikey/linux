@@ -1,0 +1,91 @@
+HiSilicon DWC3 USB SoC controller
+
+This file documents the parameters for the dwc3-hisi driver.
+
+Required properties:
+- compatible:	should be "hisilicon,hi3660-dwc3" or "hisilicon,kirin970-dwc3"
+- clocks:	A list of phandle + clock-specifier pairs for the
+		clocks listed in clock-names
+- clock-names:	Specify clock names
+- resets:	list of phandle and reset specifier pairs.
+
+Sub-nodes:
+The dwc3 core should be added as subnode to HiSilicon DWC3 as shown in the
+example below. The DT binding details of dwc3 can be found in:
+Documentation/devicetree/bindings/usb/dwc3.txt
+
+Example:
+	usb3: hisi_dwc3 {
+		compatible = "hisilicon,hi3660-dwc3";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		clocks = <&crg_ctrl HI3660_CLK_ABB_USB>,
+			 <&crg_ctrl HI3660_ACLK_GATE_USB3OTG>;
+		clock-names = "clk_usb3phy_ref", "aclk_usb3otg";
+		assigned-clocks = <&crg_ctrl HI3660_ACLK_GATE_USB3OTG>;
+		assigned-clock-rates = <229000000>;
+		resets = <&crg_rst 0x90 8>,
+			 <&crg_rst 0x90 7>,
+			 <&crg_rst 0x90 6>,
+			 <&crg_rst 0x90 5>;
+
+		dwc3: dwc3@ff100000 {
+			compatible = "snps,dwc3";
+			reg = <0x0 0xff100000 0x0 0x100000>;
+			interrupts = <0 159 4>, <0 161 4>;
+			phys = <&usb_phy>;
+			phy-names = "usb3-phy";
+			dr_mode = "otg";
+			maximum-speed = "super-speed";
+			phy_type = "utmi";
+			snps,dis-del-phy-power-chg-quirk;
+			snps,lfps_filter_quirk;
+			snps,dis_u2_susphy_quirk;
+			snps,dis_u3_susphy_quirk;
+			snps,tx_de_emphasis_quirk;
+			snps,tx_de_emphasis = <1>;
+			snps,dis_enblslpm_quirk;
+			extcon = <&hisi_pd>;
+		};
+	};
+
+	usb3: hisi_dwc3 {
+		compatible = "hisilicon,kirin970-dwc3";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		clocks = <&crg_ctrl KIRIN970_CLK_GATE_ABB_USB>,
+			 <&crg_ctrl KIRIN970_HCLK_GATE_USB3OTG>,
+			 <&crg_ctrl KIRIN970_CLK_GATE_USB3OTG_REF>,
+			 <&crg_ctrl KIRIN970_ACLK_GATE_USB3DVFS>;
+		clock-names = "clk_gate_abb_usb",
+			      "hclk_gate_usb3otg",
+			      "clk_gate_usb3otg_ref",
+			      "aclk_gate_usb3dvfs";
+		assigned-clocks = <&crg_ctrl KIRIN970_ACLK_GATE_USB3DVFS>;
+		assigned-clock-rates = <238000000>;
+		resets = <&crg_rst 0x90 6>,
+			 <&crg_rst 0x90 7>,
+			 <&usb31_misc_rst 0xA0 8>,
+			 <&usb31_misc_rst 0xA0 9>;
+
+		dwc3: dwc3@ff100000 {
+			compatible = "snps,dwc3";
+			reg = <0x0 0xff100000 0x0 0x100000>;
+			interrupts = <0 159 4>, <0 161 4>;
+			phys = <&usb_phy>;
+			phy-names = "usb3-phy";
+			dr_mode = "otg";
+			maximum-speed = "super-speed";
+			phy_type = "utmi";
+			snps,dis-del-phy-power-chg-quirk;
+			snps,dis_u2_susphy_quirk;
+			snps,dis_u3_susphy_quirk;
+			snps,tx_de_emphasis_quirk;
+			snps,tx_de_emphasis = <1>;
+			extcon = <&hisi_pd>;
+		};
+	};

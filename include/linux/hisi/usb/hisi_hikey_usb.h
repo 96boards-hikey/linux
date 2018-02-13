@@ -1,5 +1,5 @@
 /*
- * hub_usb5734.h
+ * hisi_hikey_usb.h
  *
  * Copyright (c) Hisilicon Tech. Co., Ltd. All rights reserved.
  *

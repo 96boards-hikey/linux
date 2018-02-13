@@ -20,7 +20,6 @@
 #include <linux/hisi/usb/pd/richtek/tcpci.h>
 #include <linux/hisi/usb/pd/richtek/tcpci_typec.h>
 #include <linux/hisi/usb/pd/richtek/tcpci_timer.h>
-#include <linux/hisi/usb/hub/hisi_hub.h>
 #include <linux/hisi/log/hisi_log.h>
 
 #ifdef CONFIG_TYPEC_CAP_TRY_SOURCE
@@ -368,21 +367,12 @@ static void typec_unattached_entry(struct tcpc_device *tcpc_dev)
 			tcpc_enable_timer(tcpc_dev, TYPEC_TIMER_DRP_SRC_TOGGLE);
 			break;
 		default:
-			gpio_hub_switch_to_hub();
-			gpio_hub_typec_power_off();
 			if (oldstatus == TYPEC_DEVICE) {
 				TYPEC_DBG("device off, otg host:%d:%d\r\n",
 					  oldstatus, tcpc_dev->typec_state);
-				gpio_hub_power_on();
-
-				hisi_usb_otg_event(CHARGER_DISCONNECT_EVENT);
-				hisi_usb_otg_event(ID_FALL_EVENT);
 				oldstatus = TYPEC_HOST;
 			} else if (oldstatus == TYPEC_INIT) {
 				TYPEC_DBG("init otg host no insert.\r\n");
-				gpio_hub_power_on();
-				hisi_usb_otg_event(CHARGER_DISCONNECT_EVENT);
-				hisi_usb_otg_event(ID_FALL_EVENT);
 				oldstatus = TYPEC_HOST;
 			} else {
 				TYPEC_DBG("host off, otg host:%d:%d\r\n",
@@ -445,8 +435,6 @@ static inline void typec_source_attached_entry(struct tcpc_device *tcpc_dev)
 
 	TYPEC_DBG("typec otg host attach %s\r\n", __func__);
 	oldstatus = TYPEC_HOST;
-	gpio_hub_switch_to_typec();
-	gpio_hub_typec_power_on();
 	typec_wait_ps_change(tcpc_dev, TYPEC_WAIT_PS_SRC_VSAFE5V);
 
 	tcpc_disable_timer(tcpc_dev, TYPEC_TRY_TIMER_DRP_TRY);
@@ -498,11 +486,7 @@ static inline void typec_custom_src_attached_entry(
 		tcpc_dev->typec_attach_new = TYPEC_ATTACHED_CUSTOM_SRC;
 		TYPEC_DBG("typec host mode, device attached\r\n");
 		oldstatus = TYPEC_DEVICE;
-		gpio_hub_power_off();
-		gpio_hub_typec_power_off();
 
-		hisi_usb_otg_event(ID_RISE_EVENT);
-		hisi_usb_otg_event(CHARGER_CONNECT_EVENT);
 		return;
 	}
 #endif	/* CONFIG_TYPEC_CAP_CUSTOM_SRC */
@@ -666,11 +650,6 @@ static inline void typec_cc_snk_detect_vsafe5v_entry(
 
 	TYPEC_DBG("typec device mode, attached\r\n");
 	oldstatus = TYPEC_DEVICE;
-	gpio_hub_power_off();
-	gpio_hub_typec_power_off();
-	hisi_usb_otg_event(ID_RISE_EVENT);
-	gpio_hub_switch_to_typec();
-	hisi_usb_otg_event(CHARGER_CONNECT_EVENT);
 #ifdef CONFIG_TYPEC_CAP_TRY_SOURCE
 	if (tcpc_dev->typec_role == TYPEC_ROLE_TRY_SRC) {
 		if (tcpc_dev->typec_state == typec_attachwait_snk) {
@@ -1588,11 +1567,6 @@ static int typec_init_power_off_charge(struct tcpc_device *tcpc_dev)
 	TYPEC_DBG("PowerOffCharge\r\n");
 	TYPEC_DBG("init otg host no mache insert.\r\n");
 
-	gpio_hub_power_on();
-	gpio_hub_typec_power_off();
-	hisi_usb_otg_event(CHARGER_DISCONNECT_EVENT);
-	gpio_hub_switch_to_hub();
-	hisi_usb_otg_event(ID_FALL_EVENT);
 	oldstatus = TYPEC_HOST;
 
 	TYPEC_NEW_STATE(typec_unattached_snk);

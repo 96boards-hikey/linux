@@ -1,0 +1,48 @@
+/ {
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		graphic_heap: graphic {
+			size  = <0x0 0x1E00000>;
+			alignment = <0x0 0x100000>;
+			alloc-ranges = <0x0 0x0 0x1 0x0>;
+			compatible = "hisi_ion";
+			heap-name = "carveout_gralloc";
+		};
+	};
+
+	hisi,ion {
+		compatible = "hisilicon,hisi-ion";
+
+		iommu_info {
+			start-addr = <0x40000>;
+			size = <0xbffc0000>;
+			iova-align = <0x0 0x8000>;
+		};
+
+		linear {
+			start-addr = <0x40000>;
+			size = <0xbffc0000>;
+			page-size = <0x1000>;
+			page-align = <0x40000>;
+		};
+
+		heap_sys_user@0 {
+			heap-name = "sys_heap";
+			heap-id   = <0x0>;
+			heap-base = <0x0>;
+			heap-size = <0x0>;
+			heap-type = "ion_system";
+		};
+
+		heap_carveout_gralloc@2 {
+			heap-name = <&graphic_heap>;
+			heap-id   = <0x2>;
+			heap-base = <0x0>;
+			heap-size = <0x0>;
+			heap-type = "ion_carveout";
+		};
+	};
+};

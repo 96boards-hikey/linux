@@ -11,3 +11,10 @@ config COMMON_RESET_HI6220
 	default ARCH_HISI
 	help
 	  Build the Hisilicon Hi6220 reset driver.
+
+config COMMON_RESET_USB31MISC_KIRIN970
+	tristate "Kirin970 USB31 Misc Reset Driver"
+	depends on ARCH_HISI || COMPILE_TEST
+	default ARCH_HISI
+	help
+	  Build the Hisilicon Kirin970 USB31 Misc reset driver.

@@ -33,4 +33,4 @@ obj-$(CONFIG_PCIE_ARMADA_8K) += pcie-armada8k.o
 obj-$(CONFIG_PCIE_ARTPEC6) += pcie-artpec6.o
 obj-$(CONFIG_PCIE_ROCKCHIP) += pcie-rockchip.o
 obj-$(CONFIG_VMD) += vmd.o
-obj-$(CONFIG_PCIE_KIRIN) += pcie-kirin.o
+obj-$(CONFIG_PCIE_KIRIN) += pcie-kirin.o pcie-kirin960.o pcie-kirin970.o

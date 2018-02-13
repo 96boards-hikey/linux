@@ -527,7 +527,7 @@
 			};
 		};
 
-		pd_dpm {
+		hisi_pd: pd_dpm {
 			compatible = "hisilicon,pd_dpm";
 			tcp_name = "type_c_port0";
 			status = "ok";
@@ -1076,10 +1076,10 @@
 		};
 
 		pcie@f4000000 {
-			compatible = "hisilicon,kirin-pcie";
+			compatible = "hisilicon,hikey960";
 			reg = <0x0 0xf4000000 0x0 0x1000>,
 			      <0x0 0xff3fe000 0x0 0x1000>,
-			      <0x0 0xf3f20000 0x0 0x40000>,
+			      <0x0 0xf3f00000 0x0 0x40000>,
 			      <0x0 0xf5000000 0x0 0x2000>;
 			reg-names = "dbi", "apb", "phy", "config";
 			bus-range = <0x0  0x1>;
@@ -1091,6 +1091,8 @@
 				  0x0 0x02000000>;
 			num-lanes = <1>;
 			#interrupt-cells = <1>;
+			interrupts = <0 283 4>;
+			interrups-names = "msi";
 			interrupt-map-mask = <0xf800 0 0 7>;
 			interrupt-map = <0x0 0 0 1
 					 &gic GIC_SPI 282 IRQ_TYPE_LEVEL_HIGH>,
@@ -1108,7 +1110,7 @@
 			clock-names = "pcie_phy_ref", "pcie_aux",
 				      "pcie_apb_phy", "pcie_apb_sys",
 				      "pcie_aclk";
-			reset-gpio = <&gpio11 1 0 >;
+			reset-gpios = <&gpio11 1 0 >;
 		};
 
 		/* SD */
@@ -1203,29 +1205,53 @@
 			pinctrl-0 = <&usbhub5734_pmx_func>;
 		};
 
-		hisi_usb@ff200000 {
+		usb3_otg_bc: usb3_otg_bc@ff200000 {
+			compatible = "syscon";
+			reg = <0x0 0xff200000 0x0 0x1000>;
+		};
+
+		usb_phy: usbphy {
+			compatible = "hisilicon,hi3660-usb-phy";
+			#phy-cells = <0>;
+			hisilicon,pericrg-syscon = <&crg_ctrl>;
+			hisilicon,pctrl-syscon = <&pctrl>;
+			hisilicon,usb3-otg-bc-syscon = <&usb3_otg_bc>;
+			eye-diagram-param = <0x22466e4>;
+		};
+
+		usb3: hisi_dwc3 {
+			compatible = "hisilicon,hi3660-dwc3";
 			#address-cells = <2>;
 			#size-cells = <2>;
-			compatible = "hisilicon,hi3660-dwc3";
-			reg = <0x0 0xff200000 0x0 0x1000 0x0 0xff100000 0x0 0x100000>;
 			ranges;
-			bc_again_flag = <0>;
 
 			clocks = <&crg_ctrl HI3660_CLK_ABB_USB>,
 				 <&crg_ctrl HI3660_ACLK_GATE_USB3OTG>;
 			clock-names = "clk_usb3phy_ref", "aclk_usb3otg";
-			eye_diagram_param = <0x1c466e3>;
-			eye_diagram_host_param = <0x1c466e3>;
-			usb3_phy_cr_param = <0xb80>;
-			usb3_phy_host_cr_param = <0x980>;
-			usb3_phy_tx_vboost_lvl = <0x5>;
+			assigned-clocks = <&crg_ctrl HI3660_ACLK_GATE_USB3OTG>;
+			assigned-clock-rates = <229000000>;
+			resets = <&crg_rst 0x90 8>,
+				 <&crg_rst 0x90 7>,
+				 <&crg_rst 0x90 6>,
+				 <&crg_rst 0x90 5>;
 
-			dwc3@ff100000 {
+			dwc3: dwc3@ff100000 {
 				compatible = "snps,dwc3";
 				reg = <0x0 0xff100000 0x0 0x100000>;
 				interrupts = <0 159 4>, <0 161 4>;
+				phys = <&usb_phy>;
+				phy-names = "usb3-phy";
 				dr_mode = "otg";
 				maximum-speed = "super-speed";
+				phy_type = "utmi";
+				snps,dis-del-phy-power-chg-quirk;
+				snps,lfps_filter_quirk;
+				snps,dis_u2_susphy_quirk;
+				snps,dis_u3_susphy_quirk;
+				snps,tx_de_emphasis_quirk;
+				snps,tx_de_emphasis = <1>;
+				snps,dis_enblslpm_quirk;
+				extcon = <&hisi_pd>;
 			};
 		};
 

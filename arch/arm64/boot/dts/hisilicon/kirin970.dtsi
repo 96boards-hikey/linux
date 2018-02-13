@@ -8,6 +8,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/clock/kirin970-clock.h>
 #include <dt-bindings/thermal/thermal.h>
+#include "kirin970-gpu.dtsi"
 
 / {
 	compatible = "hisilicon,kirin970";
@@ -574,7 +575,6 @@
 			#thermal-sensor-cells = <1>;
 		};
 
-		/*
 		thermal-zones {
 
 			cls0: cls0 {
@@ -617,7 +617,7 @@
 				};
 			};
 		};
-		*/
+
 		gpio0: gpio@e8a0b000 {
 			compatible = "arm,pl061", "arm,primecell", "arm,primecell0";
 			reg = <0 0xe8a0b000 0 0x1000>;
@@ -1237,7 +1237,7 @@
 			resets = <&iomcu_rst 0x20 4>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&i2c1_pmx_func &i2c1_cfg_func>;
-			status = "disabled";
+			status = "ok";
 
 			rt1711@4e {
 				compatible = "richtek,rt1711";
