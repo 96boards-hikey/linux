@@ -305,9 +305,9 @@ config PCIE_KIRIN
 	depends on OF && ARM64
 	depends on ARCH_HISI
 	select PCIE_DW
-	bool "Hisilicon Kirin960 PCIe controller"
+	bool "Hisilicon Kirin PCIe controller"
 	help
 	  Say Y here if you want PCIe controller support on Hisilicon
-	  Kirin960 SoC
+	  Kirin SoC
 
 endmenu

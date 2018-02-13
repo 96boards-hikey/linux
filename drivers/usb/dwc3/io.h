@@ -28,13 +28,6 @@ static inline u32 dwc3_readl(void __iomem *base, u32 offset)
 {
 	u32 value;
 
-#ifdef CONFIG_USB_DWC3_HISI
-	extern atomic_t hisi_dwc3_power_on;
-
-	if (unlikely(atomic_read(&hisi_dwc3_power_on) == 0))
-		return 0;
-#endif
-
 	/*
 	 * We requested the mem region starting from the Globals address
 	 * space, see dwc3_probe in core.c.
@@ -54,13 +47,6 @@ static inline u32 dwc3_readl(void __iomem *base, u32 offset)
 
 static inline void dwc3_writel(void __iomem *base, u32 offset, u32 value)
 {
-#ifdef CONFIG_USB_DWC3_HISI
-	extern atomic_t hisi_dwc3_power_on;
-
-	if (unlikely(atomic_read(&hisi_dwc3_power_on) == 0))
-		return;
-#endif
-
 	/*
 	 * We requested the mem region starting from the Globals address
 	 * space, see dwc3_probe in core.c.

@@ -14,7 +14,6 @@
 #define __HISI_PD_DEV_H__
 
 #include <linux/device.h>
-#include <linux/hisi/usb/hisi_usb.h>
 #include <linux/hisi/log/hisi_log.h>
 
 #define CONFIG_DPM_USB_PD_CUSTOM_DBGACC
@@ -144,6 +143,17 @@ struct pd_dpm_vbus_state {
 	u8 vbus_type;
 };
 
+enum hisi_charger_type {
+	CHARGER_TYPE_SDP = 0,           /*  Standard Downstreame Port */
+	CHARGER_TYPE_CDP,               /*  Charging Downstreame Port */
+	CHARGER_TYPE_DCP,               /*  Dedicate Charging Port */
+	CHARGER_TYPE_UNKNOWN,           /*  non-standard */
+	CHARGER_TYPE_NONE,              /*  not connected */
+
+	/*  other messages */
+	PLEASE_PROVIDE_POWER,           /*  host mode, provide power */
+};
+
 struct pd_dpm_info {
 	struct i2c_client *client;
 	struct device *dev;
@@ -153,7 +163,6 @@ struct pd_dpm_info {
 	struct dual_role_phy_instance *dual_role;
 	struct dual_role_phy_desc *desc;
 
-	enum hisi_charger_type charger_type;
 	struct notifier_block usb_nb;
 	struct atomic_notifier_head pd_evt_nh;
 	struct atomic_notifier_head pd_wake_unlock_evt_nh;
@@ -175,6 +184,8 @@ struct pd_dpm_info {
 	bool pd_source_vbus;
 
 	struct pd_dpm_vbus_state bc12_sink_vbus_state;
+
+	struct extcon_dev *edev;
 };
 
 /* for chip layer to get class created by core layer */

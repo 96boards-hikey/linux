@@ -1,0 +1,36 @@
+/{
+	gpu: mali@E82C0000 {
+		compatible = "arm,malit6xx", "arm,mali-midgard";
+		gpu_outstanding = <0x0>;
+		reg = <0x0 0xE82C0000 0x0 0x4000>;
+		interrupts = <0 258 4 0 259 4 0 260 4>;
+		interrupt-names = "JOB", "MMU", "GPU";
+		clocks = <&stub_clock KIRIN970_CLK_STUB_GPU>;
+		clock-names = "clk_mali";
+		ipa-model = "mali-simple-power-model";
+		operating-points = <
+			/* <frequency> <voltage>*/
+			103750  550000
+			150909  650000
+			237143  650000
+			332000  650000
+			415000  750000
+			550000  750000
+			667000  850000
+			767000  950000
+		>;
+		cooling-min-level = <7>;
+		cooling-max-level = <0>;
+		#cooling-cells = <2>; /* min followed by max */
+                system-coherency = <1>;
+
+		gpu_power_model: power_model {
+			compatible = "arm,mali-simple-power-model";
+			static-coefficient = <723>;
+			dynamic-coefficient = <7555>;
+			ts = <48020 2120 (-50) 1>;
+			thermal-zone = "cls0";
+			temp-poll-interval-ms = <100>;
+		};
+	};
+};

@@ -34,7 +34,6 @@
 #include "core.h"
 #include "gadget.h"
 #include "io.h"
-#include "dwc3-hisi.h"
 
 /**
  * dwc3_gadget_set_test_mode - Enables USB2 Test Modes
@@ -231,7 +230,7 @@ int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned cmd,
 {
 	const struct usb_endpoint_descriptor *desc = dep->endpoint.desc;
 	struct dwc3		*dwc = dep->dwc;
-	u32			timeout = 3000;
+	u32			timeout = 5000;
 	u32			reg;
 
 	int			cmd_status = 0;
@@ -2657,18 +2656,6 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 	reg = dwc3_readl(dwc->regs, DWC3_DCFG);
 	reg &= ~(DWC3_DCFG_DEVADDR_MASK);
 	dwc3_writel(dwc->regs, DWC3_DCFG, reg);
-}
-
-ATOMIC_NOTIFIER_HEAD(conndone_nh);
-
-int dwc3_conndone_notifier_register(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_register(&conndone_nh, nb);
-}
-
-int dwc3_conndone_notifier_unregister(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_unregister(&conndone_nh, nb);
 }
 
 static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)

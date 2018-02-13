@@ -1,0 +1,21 @@
+Hisilicon support  hub controller
+-----------------------------
+
+
+Required properties:
+- compatible: "hisilicon,gpio_hubv1","hisilicon,gpio_hubv2"
+
+Example
+-----
+
+	hubv2: gpio_hubv2 {
+		compatible = "hisilicon,gpio_hubv2";
+		typc_vbus_int_gpio,typec-gpios = <&gpio25 2 0>;
+		typc_vbus_enable_val = <1>;
+		otg_gpio = <&gpio25 6 0>;
+		hub_vdd12_en_gpio = <&gpio2 1 0>;
+		hub_vdd33_en_gpio = <&gpio5 6 0>;
+		hub_reset_en_gpio = <&gpio4 4 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usbhub5734_pmx_func>;
+	};

@@ -107,18 +107,11 @@ config USB_DWC3_ST
 	  Say 'Y' or 'M' if you have one such device.
 
 config USB_DWC3_HISI
-	tristate "Hisilicon Platforms"
-	select USB_DWC3_OTG
+	tristate "HiSilicon Kirin Platforms"
+	depends on ((ARCH_HISI && ARM64) || COMPILE_TEST) && OF
 	default USB_DWC3
 	help
-	  Support of USB2/3 functionality in hisilicon platforms,
-	  Say 'Y' or 'M' here if you have one such device.
-	  Use for hisilicon device and it will select USB_DWC3_OTG
-	  if Say 'Y' or 'M' here.
+	  Support of USB2/3 functionality in HiSilicon Kirin platforms.
+	  Say 'Y' or 'M' if you have one such device.
 
-config USB_DWC3_OTG
-	bool "Enable DWC3 OTG"
-	default n
-	help
-	  Say Y here to enable DWC3 OTG feature.
 endif

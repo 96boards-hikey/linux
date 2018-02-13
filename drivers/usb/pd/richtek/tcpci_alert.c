@@ -333,9 +333,6 @@ static inline int tcpci_report_usb_port_attached(struct tcpc_device *tcpc)
 {
 	TCPC_INFO("usb_port_attached\r\n");
 
-	__pm_relax(&tcpc->dettach_temp_wake_lock);
-	__pm_stay_awake(&tcpc->attach_wake_lock);
-
 #ifdef CONFIG_USB_POWER_DELIVERY
 	pd_put_cc_attached_event(tcpc, tcpc->typec_attach_new);
 #endif /* CONFIG_USB_POWER_DLEIVERY */
@@ -346,10 +343,6 @@ static inline int tcpci_report_usb_port_attached(struct tcpc_device *tcpc)
 static inline int tcpci_report_usb_port_detached(struct tcpc_device *tcpc)
 {
 	TCPC_INFO("usb_port_detached\r\n");
-
-	__pm_wakeup_event(&tcpc->dettach_temp_wake_lock,
-			  jiffies_to_msecs(msecs_to_jiffies(5 * 1000)));
-	__pm_relax(&tcpc->attach_wake_lock);
 
 #ifdef CONFIG_USB_POWER_DELIVERY
 	pd_put_cc_detached_event(tcpc);

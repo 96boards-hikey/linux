@@ -96,15 +96,6 @@ int dwc3_host_init(struct dwc3 *dwc)
 		goto err1;
 	}
 
-#ifdef CONFIG_USB_DWC3_HISI
-	/* if otg, otg will do device_add */
-	if (dwc->dwc_otg) {
-		dev_err(dwc->dev, "%s if otg, otg will do device_add.\n",
-			__func__);
-		return 0;
-	}
-#endif
-
 	memset(props, 0, sizeof(struct property_entry) * ARRAY_SIZE(props));
 
 	if (dwc->usb3_lpm_capable)
@@ -154,10 +145,6 @@ err1:
 
 void dwc3_host_exit(struct dwc3 *dwc)
 {
-#ifdef CONFIG_USB_DWC3_HISI
-	if (dwc->dwc_otg)
-		return;
-#endif
 	phy_remove_lookup(dwc->usb2_generic_phy, "usb2-phy",
 			  dev_name(dwc->dev));
 	phy_remove_lookup(dwc->usb3_generic_phy, "usb3-phy",

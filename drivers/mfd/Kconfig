@@ -361,7 +361,6 @@ config MFD_HI655X_PMIC
 config HISI_PMIC_PMU_SPMI
 	tristate "HiSilicon PMU/Codec IC and use spmi passageway"
 	depends on OF
-	depends on HISI_SPMI
 	help
 	  This driver supports HiSilicon Hisi power management and codec IC,
 	  including regulators, codec, ADCs, Coulomb counter, etc. Memory

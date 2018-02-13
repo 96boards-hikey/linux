@@ -194,10 +194,22 @@ static struct ddr_devfreq_pdata hi3660_pdata = {
 	.governor_data = &ddr_ondemand,
 };
 
+static struct ddr_devfreq_pdata kirin970_pdata = {
+	.pm_qos_constraint = PM_QOS_MEMORY_BANDWIDTH,
+	.bytes_per_cycle = 16,
+	.polling_ms = 0,
+	.governor = "simple_ondemand",
+	.governor_data = &ddr_ondemand,
+};
+
 static const struct of_device_id ddr_devfreq_of_match[] = {
 	{
 		.compatible = "hisilicon,hi3660-ddrfreq",
 		.data = &hi3660_pdata,
+	},
+	{
+		.compatible = "hisilicon,kirin970-ddrfreq",
+		.data = &kirin970_pdata,
 	},
 	{},
 };
