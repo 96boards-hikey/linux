@@ -496,12 +496,3 @@
 		interrupts = <3 IRQ_TYPE_EDGE_RISING>;
 	};
 };
-
-&ufs {
-	ufs-hi3660-use-rate-B;
-	ufs-hi3660-broken-fastauto;
-	ufs-hi3660-use-HS-GEAR3;
-	ufs-hi3660-broken-clk-gate-bypass;
-	reset-gpio = <&gpio18 1 0>;
-	status = "okay";
-};

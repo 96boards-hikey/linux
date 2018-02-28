@@ -25238,11 +25238,8 @@ static int rtl8168_open(struct net_device *dev)
         if (retval<0)
                 goto err_free_all_allocated_mem;
 
-#if 0 /* Resolve No buff space available */
         if (tp->esd_flag == 0)
                 rtl8168_request_esd_timer(dev);
-#endif
-        tp->esd_flag = 0;
 
         rtl8168_request_link_timer(dev);
 

@@ -1180,7 +1180,7 @@
 		};
 
 		ufs: ufs@ff3b0000 {
-			compatible = "jedec,ufs-1.1", "hisilicon,hi3660-ufs";
+			compatible = "hisilicon,hi3660-ufs", "jedec,ufs-1.1";
 			/* 0: HCI standard */
 			/* 1: UFS SYS CTRL */
 			reg = <0x0 0xff3b0000 0x0 0x1000>,
@@ -1189,7 +1189,7 @@
 			interrupts = <GIC_SPI 278 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&crg_ctrl HI3660_CLK_GATE_UFSIO_REF>,
 				 <&crg_ctrl HI3660_CLK_GATE_UFSPHY_CFG>;
-			clock-names = "clk_ref", "clk_phy";
+			clock-names = "ref_clk", "phy_clk";
 			freq-table-hz = <0 0>, <0 0>;
 			/* offset: 0x84; bit: 12 */
 			/* offset: 0x84; bit: 7  */
@@ -1197,7 +1197,6 @@
 				<&crg_rst 0x84 7>;
 			reset-names = "rst", "assert";
 		};
-
 
 		hub5734_gpio:hub5734_gpio {
 			compatible = "hub5734_gpio";
