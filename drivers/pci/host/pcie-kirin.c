@@ -190,7 +190,7 @@ static int __init kirin_add_pcie_port(struct pcie_port *pp,
 		}
 		ret = devm_request_irq(&pdev->dev, pp->msi_irq,
 					kirin_pcie_msi_irq_handler,
-					IRQF_SHARED | IRQF_TRIGGER_RISING,
+					IRQF_SHARED | IRQF_NO_THREAD,
 					"kirin_pcie_msi", pp);
 		if (ret) {
 			dev_err(&pdev->dev, "failed to request msi irq\n");
