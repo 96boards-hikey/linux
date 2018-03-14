@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -317,9 +317,8 @@ void kbasep_platform_device_term(struct kbase_device *kbdev);
 int kbase_platform_early_init(void);
 
 #ifndef CONFIG_OF
-#ifdef CONFIG_MALI_PLATFORM_FAKE
 /**
- * kbase_platform_fake_register - Register a platform device for the GPU
+ * kbase_platform_register - Register a platform device for the GPU
  *
  * This can be used to register a platform device on systems where device tree
  * is not enabled and the platform initialisation code in the kernel doesn't
@@ -327,15 +326,14 @@ int kbase_platform_early_init(void);
  *
  * Return: 0 for success, any other fail causes module initialisation to fail
  */
-int kbase_platform_fake_register(void);
+int kbase_platform_register(void);
 
 /**
- * kbase_platform_fake_unregister - Unregister a fake platform device
+ * kbase_platform_unregister - Unregister a fake platform device
  *
- * Unregister the platform device created with kbase_platform_fake_register()
+ * Unregister the platform device created with kbase_platform_register()
  */
-void kbase_platform_fake_unregister(void);
-#endif
+void kbase_platform_unregister(void);
 #endif
 
 	  /** @} *//* end group kbase_config */

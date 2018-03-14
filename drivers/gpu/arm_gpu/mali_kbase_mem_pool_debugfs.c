@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2015, 2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -69,13 +69,20 @@ DEFINE_SIMPLE_ATTRIBUTE(kbase_mem_pool_debugfs_max_size_fops,
 		"%llu\n");
 
 void kbase_mem_pool_debugfs_init(struct dentry *parent,
-		struct kbase_mem_pool *pool)
+		struct kbase_mem_pool *pool,
+		struct kbase_mem_pool *lp_pool)
 {
 	debugfs_create_file("mem_pool_size", S_IRUGO | S_IWUSR, parent,
 			pool, &kbase_mem_pool_debugfs_size_fops);
 
 	debugfs_create_file("mem_pool_max_size", S_IRUGO | S_IWUSR, parent,
 			pool, &kbase_mem_pool_debugfs_max_size_fops);
+
+	debugfs_create_file("lp_mem_pool_size", S_IRUGO | S_IWUSR, parent,
+			lp_pool, &kbase_mem_pool_debugfs_size_fops);
+
+	debugfs_create_file("lp_mem_pool_max_size", S_IRUGO | S_IWUSR, parent,
+			lp_pool, &kbase_mem_pool_debugfs_max_size_fops);
 }
 
 #endif /* CONFIG_DEBUG_FS */

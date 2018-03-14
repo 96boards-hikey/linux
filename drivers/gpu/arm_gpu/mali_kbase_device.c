@@ -94,7 +94,6 @@ static int kbase_device_as_init(struct kbase_device *kbdev, int i)
 			destroy_workqueue(kbdev->as[i].pf_wq);
 			return -EINVAL;
 		}
-		KBASE_DEBUG_ASSERT(!object_is_on_stack(poke_work));
 		INIT_WORK(poke_work, kbasep_as_do_poke);
 
 		hrtimer_init(poke_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);

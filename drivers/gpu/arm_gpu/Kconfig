@@ -1,5 +1,5 @@
 #
-# (C) COPYRIGHT 2012-2015 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2012-2017 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -36,7 +36,7 @@ config MALI_GATOR_SUPPORT
 
 config MALI_MIDGARD_DVFS
 	bool "Enable legacy DVFS"
-	depends on MALI_MIDGARD && !MALI_DEVFREQ && !MALI_PLATFORM_DEVICETREE
+	depends on MALI_MIDGARD && !MALI_DEVFREQ
 	default n
 	help
 	  Choose this option to enable legacy DVFS in the Mali Midgard DDK.
@@ -61,13 +61,22 @@ config MALI_DEVFREQ
 
 config MALI_DMA_FENCE
 	bool "DMA_BUF fence support for Mali"
-	depends on MALI_MIDGARD && !KDS
+	depends on MALI_MIDGARD
 	default n
 	help
 	  Support DMA_BUF fences for Mali.
 
-	  This option should only be enabled if KDS is not present and
-	  the Linux Kernel has built in support for DMA_BUF fences.
+	  This option should only be enabled if the Linux Kernel has built in
+	  support for DMA_BUF fences.
+
+config MALI_PLATFORM_NAME
+	depends on MALI_MIDGARD
+	string "Platform name"
+	default "devicetree"
+	help
+	  Enter the name of the desired platform configuration directory to
+	  include in the build. 'platform/$(MALI_PLATFORM_NAME)/Kbuild' must
+	  exist.
 
 # MALI_EXPERT configuration options
 
@@ -104,65 +113,6 @@ config MALI_PRFCNT_SET_SECONDARY
 	  bogus results.
 
 	  If unsure, say N.
-
-config MALI_PLATFORM_FAKE
-	bool "Enable fake platform device support"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default n
-	help
-	  When you start to work with the Mali Midgard series device driver the platform-specific code of
-	  the Linux kernel for your platform may not be complete. In this situation the kernel device driver
-	  supports creating the platform device outside of the Linux platform-specific code.
-	  Enable this option if would like to use a platform device configuration from within the device driver.
-
-choice
-	prompt "Platform configuration"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default MALI_PLATFORM_DEVICETREE
-	help
-	  Select the SOC platform that contains a Mali Midgard GPU
-
-config MALI_PLATFORM_DEVICETREE
-	bool "Device Tree platform"
-	depends on OF
-	help
-	  Select this option to use Device Tree with the Mali driver.
-
-	  When using this option the Mali driver will get the details of the
-	  GPU hardware from the Device Tree. This means that the same driver
-	  binary can run on multiple platforms as long as all the GPU hardware
-	  details are described in the device tree.
-
-	  Device Tree is the recommended method for the Mali driver platform
-	  integration.
-
-config MALI_PLATFORM_VEXPRESS
-	depends on ARCH_VEXPRESS && (ARCH_VEXPRESS_CA9X4 || ARCH_VEXPRESS_CA15X4)
-	bool "Versatile Express"
-config MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ
-	depends on ARCH_VEXPRESS && (ARCH_VEXPRESS_CA9X4 || ARCH_VEXPRESS_CA15X4)
-	bool "Versatile Express w/Virtex7 @ 40Mhz"
-config MALI_PLATFORM_GOLDFISH
-	depends on ARCH_GOLDFISH
-	bool "Android Goldfish virtual CPU"
-config MALI_PLATFORM_PBX
-	depends on ARCH_REALVIEW && REALVIEW_EB_A9MP && MACH_REALVIEW_PBX
-	bool "Realview PBX-A9"
-config MALI_PLATFORM_HISILICON
-	bool "Hisilicon"
-	depends on MALI_MIDGARD && MALI_EXPERT
-
-config MALI_PLATFORM_THIRDPARTY
-	bool "Third Party Platform"
-endchoice
-
-config MALI_PLATFORM_THIRDPARTY_NAME
-	depends on MALI_MIDGARD && MALI_PLATFORM_THIRDPARTY && MALI_EXPERT
-	string "Third party platform name"
-	help
-	  Enter the name of a third party platform that is supported. The third part configuration
-	  file must be in midgard/config/tpip/mali_kbase_config_xxx.c where xxx is the name
-	  specified here.
 
 config MALI_DEBUG
 	bool "Debug build"
@@ -224,21 +174,6 @@ config MALI_SYSTEM_TRACE
 	  minimal overhead when not in use. Enable only if you know what
 	  you are doing.
 
-config MALI_GPU_MMU_AARCH64
-	bool "Use AArch64 page tables"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default n
-	help
-	  Use AArch64 format page tables for the GPU instead of LPAE-style.
-	  The two formats have the same functionality and performance but a
-	  future GPU may deprecate or remove the legacy LPAE-style format.
-
-	  The LPAE-style format is supported on all Midgard and current Bifrost
-	  GPUs. Enabling AArch64 format restricts the driver to only supporting
-	  Bifrost GPUs.
-
-	  If in doubt, say N.
-
 config MALI_2MB_ALLOC
 	bool "Attempt to allocate 2MB pages"
 	depends on MALI_MIDGARD && MALI_EXPERT
@@ -252,12 +187,15 @@ config MALI_2MB_ALLOC
 
 config MALI_PWRSOFT_765
 	bool "PWRSOFT-765 ticket"
+	depends on MALI_MIDGARD && MALI_EXPERT
 	default n
 	help
-	  PWRSOFT-765 fixes devfreq cooling devices issues. However, they are
-	  not merged in mainline kernel yet. So this define helps to guard those
-	  parts of the code.
+	  PWRSOFT-765 fixes devfreq cooling devices issues. The fix was merged
+	  in kernel v4.10, however if backported into the kernel then this
+	  option must be manually selected.
+
+	  If using kernel >= v4.10 then say N, otherwise if devfreq cooling
+	  changes have been backported say Y to avoid compilation errors.
 
 source "drivers/gpu/arm_gpu/platform/Kconfig"
-#source "drivers/gpu/arm/midgard/platform/Kconfig"
-#source "drivers/gpu/arm/midgard/tests/Kconfig"
+source "drivers/gpu/arm_gpu/tests/Kconfig"

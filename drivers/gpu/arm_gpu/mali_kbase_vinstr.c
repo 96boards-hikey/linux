@@ -33,6 +33,9 @@
 #include <mali_kbase_hwcnt_reader.h>
 #include <mali_kbase_mem_linux.h>
 #include <mali_kbase_tlstream.h>
+#ifdef CONFIG_MALI_NO_MALI
+#include <backend/gpu/mali_kbase_model_dummy.h>
+#endif
 
 /*****************************************************************************/
 
@@ -373,7 +376,7 @@ static void kbasep_vinstr_unmap_kernel_dump_buffer(
 static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 {
 	struct kbase_device *kbdev = vinstr_ctx->kbdev;
-	struct kbasep_kctx_list_element *element;
+	struct kbasep_kctx_list_element *element = NULL;
 	unsigned long flags;
 	bool enable_backend = false;
 	int err;
@@ -385,11 +388,8 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 	/* Map the master kernel dump buffer.  The HW dumps the counters
 	 * into this memory region. */
 	err = kbasep_vinstr_map_kernel_dump_buffer(vinstr_ctx);
-	if (err) {
-		kbase_destroy_context(vinstr_ctx->kctx);
-		vinstr_ctx->kctx = NULL;
-		return err;
-	}
+	if (err)
+		goto failed_map;
 
 	/* Add kernel context to list of contexts associated with device. */
 	element = kzalloc(sizeof(*element), GFP_KERNEL);
@@ -403,7 +403,7 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 		 * being created in both body and summary stream. */
 		KBASE_TLSTREAM_TL_NEW_CTX(
 				vinstr_ctx->kctx,
-				(u32)(vinstr_ctx->kctx->id),
+				vinstr_ctx->kctx->id,
 				(u32)(vinstr_ctx->kctx->tgid));
 
 		mutex_unlock(&kbdev->kctx_list_lock);
@@ -423,41 +423,38 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 	spin_unlock_irqrestore(&vinstr_ctx->state_lock, flags);
 	if (enable_backend)
 		err = enable_hwcnt(vinstr_ctx);
-
-	if (err) {
-		kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
-		kbase_destroy_context(vinstr_ctx->kctx);
-		if (element) {
-			mutex_lock(&kbdev->kctx_list_lock);
-			list_del(&element->link);
-			kfree(element);
-			mutex_unlock(&kbdev->kctx_list_lock);
-		}
-		KBASE_TLSTREAM_TL_DEL_CTX(vinstr_ctx->kctx);
-		vinstr_ctx->kctx = NULL;
-		return err;
-	}
+	if (err)
+		goto failed_enable;
 
 	vinstr_ctx->thread = kthread_run(
 			kbasep_vinstr_service_task,
 			vinstr_ctx,
 			"mali_vinstr_service");
 	if (IS_ERR(vinstr_ctx->thread)) {
-		disable_hwcnt(vinstr_ctx);
-		kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
-		kbase_destroy_context(vinstr_ctx->kctx);
-		if (element) {
-			mutex_lock(&kbdev->kctx_list_lock);
-			list_del(&element->link);
-			kfree(element);
-			mutex_unlock(&kbdev->kctx_list_lock);
-		}
-		KBASE_TLSTREAM_TL_DEL_CTX(vinstr_ctx->kctx);
-		vinstr_ctx->kctx = NULL;
-		return -EFAULT;
+		err = PTR_ERR(vinstr_ctx->thread);
+		goto failed_kthread;
 	}
 
 	return 0;
+
+failed_kthread:
+	disable_hwcnt(vinstr_ctx);
+failed_enable:
+	spin_lock_irqsave(&vinstr_ctx->state_lock, flags);
+	vinstr_ctx->clients_present = false;
+	spin_unlock_irqrestore(&vinstr_ctx->state_lock, flags);
+	kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
+	if (element) {
+		mutex_lock(&kbdev->kctx_list_lock);
+		list_del(&element->link);
+		kfree(element);
+		mutex_unlock(&kbdev->kctx_list_lock);
+		KBASE_TLSTREAM_TL_DEL_CTX(vinstr_ctx->kctx);
+	}
+failed_map:
+	kbase_destroy_context(vinstr_ctx->kctx);
+	vinstr_ctx->kctx = NULL;
+	return err;
 }
 
 /**
@@ -476,7 +473,6 @@ static void kbasep_vinstr_destroy_kctx(struct kbase_vinstr_context *vinstr_ctx)
 	vinstr_ctx->thread = NULL;
 	disable_hwcnt(vinstr_ctx);
 	kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
-	kbase_destroy_context(vinstr_ctx->kctx);
 
 	/* Simplify state transitions by specifying that we have no clients. */
 	spin_lock_irqsave(&vinstr_ctx->state_lock, flags);
@@ -496,6 +492,9 @@ static void kbasep_vinstr_destroy_kctx(struct kbase_vinstr_context *vinstr_ctx)
 
 	if (!found)
 		dev_warn(kbdev->dev, "kctx not in kctx_list\n");
+
+	/* Destroy context. */
+	kbase_destroy_context(vinstr_ctx->kctx);
 
 	/* Inform timeline client about context destruction. */
 	KBASE_TLSTREAM_TL_DEL_CTX(vinstr_ctx->kctx);

@@ -1427,7 +1427,7 @@ static void kbase_create_timeline_objects(struct kbase_context *kctx)
 	list_for_each_entry(element, &kbdev->kctx_list, link) {
 		KBASE_TLSTREAM_TL_SUMMARY_NEW_CTX(
 				element->kctx,
-				(u32)(element->kctx->id),
+				element->kctx->id,
 				(u32)(element->kctx->tgid));
 	}
 	/* Before releasing the lock, reset body stream buffers.

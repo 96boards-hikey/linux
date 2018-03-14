@@ -26,6 +26,7 @@
 #include "mali_kbase.h"
 #include "mali_kbase_defs.h"
 #include "mali_kbase_ipa_simple.h"
+#include "mali_kbase_ipa_debugfs.h"
 
 #if MALI_UNIT_TEST
 
@@ -45,7 +46,7 @@ static int dummy_temp;
 
 static int kbase_simple_power_model_get_dummy_temp(
 	struct thermal_zone_device *tz,
-	int *dummy_temp)
+	int *temp)
 {
 	*temp = ACCESS_ONCE(dummy_temp);
 	return 0;
@@ -112,10 +113,10 @@ struct kbase_ipa_model_simple_data {
 static u32 calculate_temp_scaling_factor(s32 ts[4], s64 t)
 {
 	/* Range: -2^24 < t2 < 2^24 m(Deg^2) */
-	const s64 t2 = (t * t) / 1000;
+	const s64 t2 = div_s64((t * t), 1000);
 
 	/* Range: -2^31 < t3 < 2^31 m(Deg^3) */
-	const s64 t3 = (t * t2) / 1000;
+	const s64 t3 = div_s64((t * t2), 1000);
 
 	/*
 	 * Sum the parts. t^[1-3] are in m(Deg^N), but the coefficients are in
@@ -128,7 +129,7 @@ static u32 calculate_temp_scaling_factor(s32 ts[4], s64 t)
 			  + ts[0] * 1000; /* +/- 2^41 */
 
 	/* Range: -2^60 < res_unclamped < 2^60 */
-	s64 res_unclamped = res_big / 1000;
+	s64 res_unclamped = div_s64(res_big, 1000);
 
 	/* Clamp to range of 0x to 10x the static power */
 	return clamp(res_unclamped, (s64) 0, (s64) 10000000);
@@ -191,7 +192,7 @@ static int model_static_coeff(struct kbase_ipa_model *model, u32 *coeffp)
 	 * 0 <= static_coefficient < 2^28.
 	 */
 	coeff_big = (u64) model_data->static_coefficient * (u64) temp_scaling_factor;
-	*coeffp = coeff_big / 1000000;
+	*coeffp = div_u64(coeff_big, 1000000);
 
 	return 0;
 }
@@ -252,10 +253,8 @@ static int kbase_simple_power_model_init(struct kbase_ipa_model *model)
 
 	model_data = kzalloc(sizeof(struct kbase_ipa_model_simple_data),
 			     GFP_KERNEL);
-	if (!model_data) {
-		err = -ENOMEM;
-		goto exit;
-	}
+	if (!model_data)
+		return -ENOMEM;
 
 	model->model_data = (void *) model_data;
 
@@ -263,17 +262,15 @@ static int kbase_simple_power_model_init(struct kbase_ipa_model *model)
 	model_data->poll_temperature_thread = kthread_run(poll_temperature,
 							  (void *) model_data,
 							  "mali-simple-power-model-temp-poll");
-	if (!model_data->poll_temperature_thread) {
-		err = -ENOMEM;
-		goto exit;
+	if (IS_ERR(model_data->poll_temperature_thread)) {
+		kfree(model_data);
+		return PTR_ERR(model_data->poll_temperature_thread);
 	}
 
 	err = add_params(model);
-
-exit:
 	if (err) {
-		if (model_data->poll_temperature_thread)
-			kthread_stop(model_data->poll_temperature_thread);
+		kbase_ipa_model_param_free_all(model);
+		kthread_stop(model_data->poll_temperature_thread);
 		kfree(model_data);
 	}
 
@@ -323,3 +320,4 @@ struct kbase_ipa_model_ops kbase_simple_ipa_model_ops = {
 		.get_static_coeff = &model_static_coeff,
 		.do_utilization_scaling_in_framework = true,
 };
+KBASE_EXPORT_TEST_API(kbase_simple_ipa_model_ops);

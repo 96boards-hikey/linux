@@ -44,6 +44,7 @@
 #include <mali_kbase_mem_linux.h>
 #include <mali_kbase_config_defaults.h>
 #include <mali_kbase_tlstream.h>
+#include <mali_kbase_ioctl.h>
 
 static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_struct *vma);
 
@@ -152,8 +153,11 @@ struct kbase_va_region *kbase_mem_alloc(struct kbase_context *kctx,
 		goto prepare_failed;
 	}
 
-	if (*flags & BASE_MEM_GROW_ON_GPF)
+	if (*flags & BASE_MEM_GROW_ON_GPF) {
 		reg->extent = extent;
+		if (reg->extent == 0)
+			goto invalid_extent;
+	}
 	else
 		reg->extent = 0;
 
@@ -235,6 +239,7 @@ struct kbase_va_region *kbase_mem_alloc(struct kbase_context *kctx,
 no_mmap:
 no_cookie:
 no_mem:
+invalid_extent:
 	kbase_mem_phy_alloc_put(reg->cpu_alloc);
 	kbase_mem_phy_alloc_put(reg->gpu_alloc);
 invalid_flags:
@@ -589,7 +594,7 @@ static void kbase_mem_evictable_mark_reclaim(struct kbase_mem_phy_alloc *alloc)
 	kbase_atomic_sub_pages(alloc->nents, &kctx->kbdev->memdev.used_pages);
 
 	KBASE_TLSTREAM_AUX_PAGESALLOC(
-			(u32)kctx->id,
+			kctx->id,
 			(u64)new_page_count);
 }
 
@@ -637,7 +642,7 @@ void kbase_mem_evictable_unmark_reclaim(struct kbase_mem_phy_alloc *alloc)
 	}
 
 	KBASE_TLSTREAM_AUX_PAGESALLOC(
-			(u32)kctx->id,
+			kctx->id,
 			(u64)new_page_count);
 }
 
@@ -796,7 +801,9 @@ int kbase_mem_flags_change(struct kbase_context *kctx, u64 gpu_addr, unsigned in
 	switch (reg->gpu_alloc->type) {
 #ifdef CONFIG_UMP
 	case KBASE_MEM_TYPE_IMPORTED_UMP:
-		ret = kbase_mmu_update_pages(kctx, reg->start_pfn, kbase_get_cpu_phy_pages(reg), reg->gpu_alloc->nents, reg->flags);
+		ret = kbase_mmu_update_pages(kctx, reg->start_pfn,
+					     kbase_get_gpu_phy_pages(reg),
+				             reg->gpu_alloc->nents, reg->flags);
 		break;
 #endif
 #ifdef CONFIG_DMA_SHARED_BUFFER
@@ -1788,9 +1795,15 @@ static void kbase_cpu_vm_close(struct vm_area_struct *vma)
 KBASE_EXPORT_TEST_API(kbase_cpu_vm_close);
 
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0))
+static int kbase_cpu_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+#else
 static int kbase_cpu_vm_fault(struct vm_fault *vmf)
 {
-	struct kbase_cpu_mapping *map = vmf->vma->vm_private_data;
+	struct vm_area_struct *vma = vmf->vma;
+#endif
+	struct kbase_cpu_mapping *map = vma->vm_private_data;
 	pgoff_t rel_pgoff;
 	size_t i;
 	pgoff_t addr;
@@ -1817,8 +1830,8 @@ static int kbase_cpu_vm_fault(struct vm_fault *vmf)
 #else
 	addr = (pgoff_t)(vmf->address >> PAGE_SHIFT);
 #endif
-	while (i < map->alloc->nents && (addr < vmf->vma->vm_end >> PAGE_SHIFT)) {
-		int ret = vm_insert_pfn(vmf->vma, addr << PAGE_SHIFT,
+	while (i < map->alloc->nents && (addr < vma->vm_end >> PAGE_SHIFT)) {
+		int ret = vm_insert_pfn(vma, addr << PAGE_SHIFT,
 		    PFN_DOWN(as_phys_addr_t(map->alloc->pages[i])));
 		if (ret < 0 && ret != -EBUSY)
 			goto locked_bad_fault;
@@ -2540,7 +2553,6 @@ static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_
 }
 void *kbase_va_alloc(struct kbase_context *kctx, u32 size, struct kbase_hwc_dma_mapping *handle)
 {
-	int i;
 	int res;
 	void *va;
 	dma_addr_t  dma_pa;
@@ -2555,6 +2567,7 @@ void *kbase_va_alloc(struct kbase_context *kctx, u32 size, struct kbase_hwc_dma_
 	u32 pages = ((size - 1) >> PAGE_SHIFT) + 1;
 	u32 flags = BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_CPU_WR |
 		    BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR;
+	u32 i;
 
 	KBASE_DEBUG_ASSERT(kctx != NULL);
 	KBASE_DEBUG_ASSERT(0 != size);
@@ -2600,7 +2613,7 @@ void *kbase_va_alloc(struct kbase_context *kctx, u32 size, struct kbase_hwc_dma_
 	page_array = kbase_get_cpu_phy_pages(reg);
 
 	for (i = 0; i < pages; i++)
-		page_array[i] = as_tagged(dma_pa + (i << PAGE_SHIFT));
+		page_array[i] = as_tagged(dma_pa + ((dma_addr_t)i << PAGE_SHIFT));
 
 	reg->cpu_alloc->nents = pages;
 

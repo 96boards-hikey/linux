@@ -35,9 +35,8 @@
 #include <linux/ktime.h>
 #include <linux/pfn.h>
 #include <linux/sched.h>
-
-/* Mask to check cache alignment of data structures */
-#define KBASE_CACHE_ALIGNMENT_MASK		((1<<L1_CACHE_SHIFT)-1)
+#include <linux/kernel.h>
+#include <linux/cache.h>
 
 /**
  * @file mali_kbase_softjobs.c
@@ -710,12 +709,11 @@ out_unlock:
 	kbase_gpu_vm_unlock(katom->kctx);
 
 out_cleanup:
-	kfree(buffers);
-	kfree(user_buffers);
-
 	/* Frees allocated memory for kbase_debug_copy_job struct, including
 	 * members, and sets jc to 0 */
 	kbase_debug_copy_finish(katom);
+	kfree(user_buffers);
+
 	return ret;
 }
 
@@ -770,6 +768,7 @@ static int kbase_mem_copy_from_extres(struct kbase_context *kctx,
 	u64 offset = buf_data->offset;
 	size_t extres_size = buf_data->nr_extres_pages*PAGE_SIZE;
 	size_t to_copy = min(extres_size, buf_data->size);
+	size_t dma_to_copy;
 	struct kbase_mem_phy_alloc *gpu_alloc = buf_data->gpu_alloc;
 	int ret = 0;
 
@@ -807,18 +806,20 @@ static int kbase_mem_copy_from_extres(struct kbase_context *kctx,
 		struct dma_buf *dma_buf = gpu_alloc->imported.umm.dma_buf;
 
 		KBASE_DEBUG_ASSERT(dma_buf != NULL);
-		KBASE_DEBUG_ASSERT(dma_buf->size ==
-				   buf_data->nr_extres_pages * PAGE_SIZE);
+		if (dma_buf->size > buf_data->nr_extres_pages * PAGE_SIZE)
+			dev_warn(kctx->kbdev->dev, "External resources buffer size mismatch");
 
+		dma_to_copy = min(dma_buf->size,
+			(size_t)(buf_data->nr_extres_pages * PAGE_SIZE));
 		ret = dma_buf_begin_cpu_access(dma_buf,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0) && !defined(CONFIG_CHROMEOS)
-				0, buf_data->nr_extres_pages*PAGE_SIZE,
+				0, dma_to_copy,
 #endif
 				DMA_FROM_DEVICE);
 		if (ret)
 			goto out_unlock;
 
-		for (i = 0; i < buf_data->nr_extres_pages; i++) {
+		for (i = 0; i < dma_to_copy/PAGE_SIZE; i++) {
 
 			void *extres_page = dma_buf_kmap(dma_buf, i);
 
@@ -835,7 +836,7 @@ static int kbase_mem_copy_from_extres(struct kbase_context *kctx,
 		}
 		dma_buf_end_cpu_access(dma_buf,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0) && !defined(CONFIG_CHROMEOS)
-				0, buf_data->nr_extres_pages*PAGE_SIZE,
+				0, dma_to_copy,
 #endif
 				DMA_FROM_DEVICE);
 		break;
@@ -1239,13 +1240,13 @@ static void kbase_ext_res_process(struct kbase_jd_atom *katom, bool map)
 	return;
 
 failed_loop:
-	while (--i > 0) {
-		u64 gpu_addr;
-
-		gpu_addr = ext_res->ext_res[i].ext_resource &
+	while (i > 0) {
+		u64 const gpu_addr = ext_res->ext_res[i - 1].ext_resource &
 				~BASE_EXT_RES_ACCESS_EXCLUSIVE;
 
 		kbase_sticky_resource_release(katom->kctx, NULL, gpu_addr);
+
+		--i;
 	}
 
 	katom->event_code = BASE_JD_EVENT_JOB_INVALID;
@@ -1348,7 +1349,7 @@ int kbase_prepare_soft_job(struct kbase_jd_atom *katom)
 	switch (katom->core_req & BASE_JD_REQ_SOFT_JOB_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		{
-			if (0 != (katom->jc & KBASE_CACHE_ALIGNMENT_MASK))
+			if (!IS_ALIGNED(katom->jc, cache_line_size()))
 				return -EINVAL;
 		}
 		break;

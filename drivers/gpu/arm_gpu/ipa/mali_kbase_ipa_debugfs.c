@@ -142,6 +142,12 @@ int kbase_ipa_model_param_add(struct kbase_ipa_model *model, const char *name,
 	/* 'name' is stack-allocated for array elements, so copy it into
 	 * heap-allocated storage */
 	param->name = kstrdup(name, GFP_KERNEL);
+
+	if (!param->name) {
+		kfree(param);
+		return -ENOMEM;
+	}
+
 	param->addr.voidp = addr;
 	param->size = size;
 	param->type = type;
@@ -206,6 +212,30 @@ static void kbase_ipa_model_debugfs_init(struct kbase_ipa_model *model)
 		}
 	}
 }
+
+void kbase_ipa_model_param_set_s32(struct kbase_ipa_model *model,
+	const char *name, s32 val)
+{
+	struct kbase_ipa_model_param *param;
+
+	mutex_lock(&model->kbdev->ipa.lock);
+
+	list_for_each_entry(param, &model->params, link) {
+		if (!strcmp(param->name, name)) {
+			if (param->type == PARAM_TYPE_S32) {
+				*param->addr.s32p = val;
+			} else {
+				dev_err(model->kbdev->dev,
+					"Wrong type for %s parameter %s\n",
+					model->ops->name, param->name);
+			}
+			break;
+		}
+	}
+
+	mutex_unlock(&model->kbdev->ipa.lock);
+}
+KBASE_EXPORT_TEST_API(kbase_ipa_model_param_set_s32);
 
 void kbase_ipa_debugfs_init(struct kbase_device *kbdev)
 {

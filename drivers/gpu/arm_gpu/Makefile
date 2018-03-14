@@ -19,20 +19,16 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 BUSLOG_PATH_RELATIVE = $(CURDIR)/../../../..
 UMP_PATH_RELATIVE = $(CURDIR)/../../../base/ump
 KBASE_PATH_RELATIVE = $(CURDIR)
-KDS_PATH_RELATIVE = $(CURDIR)/../../../..
 EXTRA_SYMBOLS = $(UMP_PATH_RELATIVE)/src/Module.symvers
 
 ifeq ($(MALI_UNIT_TEST), 1)
 	EXTRA_SYMBOLS += $(KBASE_PATH_RELATIVE)/tests/internal/src/kernel_assert_module/linux/Module.symvers
 endif
 
-ifeq ($(MALI_BUS_LOG), 1)
+ifeq ($(CONFIG_MALI_FPGA_BUS_LOGGER),y)
 #Add bus logger symbols
 EXTRA_SYMBOLS += $(BUSLOG_PATH_RELATIVE)/drivers/base/bus_logger/Module.symvers
 endif
-
-# GPL driver supports KDS
-EXTRA_SYMBOLS += $(KDS_PATH_RELATIVE)/drivers/base/kds/Module.symvers
 
 # we get the symbols from modules using KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
 all:
