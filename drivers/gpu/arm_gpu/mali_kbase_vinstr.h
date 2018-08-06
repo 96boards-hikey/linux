@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2015-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2015-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -18,7 +18,6 @@
 #ifndef _KBASE_VINSTR_H_
 #define _KBASE_VINSTR_H_
 
-#include <mali_kbase.h>
 #include <mali_kbase_hwcnt_reader.h>
 
 /*****************************************************************************/
@@ -26,6 +25,29 @@
 struct kbase_vinstr_context;
 struct kbase_vinstr_client;
 
+struct kbase_uk_hwcnt_setup {
+	/* IN */
+	u64 dump_buffer;
+	u32 jm_bm;
+	u32 shader_bm;
+	u32 tiler_bm;
+	u32 unused_1; /* keep for backwards compatibility */
+	u32 mmu_l2_bm;
+	u32 padding;
+	/* OUT */
+};
+
+struct kbase_uk_hwcnt_reader_setup {
+	/* IN */
+	u32 buffer_count;
+	u32 jm_bm;
+	u32 shader_bm;
+	u32 tiler_bm;
+	u32 mmu_l2_bm;
+
+	/* OUT */
+	s32 fd;
+};
 /*****************************************************************************/
 
 /**

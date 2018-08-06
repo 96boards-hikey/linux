@@ -17,10 +17,9 @@
 
 
 
-#include "mali_kbase_mmu_mode.h"
-
 #include "mali_kbase.h"
 #include "mali_midg_regmap.h"
+#include "mali_kbase_defs.h"
 
 #define ENTRY_TYPE_MASK     3ULL
 /* For valid ATEs bit 1 = ((level == 3) ? 1 : 0).
@@ -131,8 +130,11 @@ static int ate_is_valid(u64 ate, unsigned int level)
 		return ((ate & ENTRY_TYPE_MASK) == ENTRY_IS_ATE_L02);
 }
 
-static int pte_is_valid(u64 pte)
+static int pte_is_valid(u64 pte, unsigned int level)
 {
+	/* PTEs cannot exist at the bottom level */
+	if (level == MIDGARD_MMU_BOTTOMLEVEL)
+		return false;
 	return ((pte & ENTRY_TYPE_MASK) == ENTRY_IS_PTE);
 }
 

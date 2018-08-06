@@ -23,12 +23,12 @@
 /* The Context Scheduler manages address space assignment and reference
  * counting to kbase_context. The interface has been designed to minimise
  * interactions between the Job Scheduler and Power Management/MMU to support
- * both the existing Job Scheduler and Command Stream Frontend interface.
+ * the existing Job Scheduler interface.
  *
  * The initial implementation of the Context Scheduler does not schedule
- * contexts. Instead it relies on the Job Scheduler/CSF to make decisions of
+ * contexts. Instead it relies on the Job Scheduler to make decisions of
  * when to schedule/evict contexts if address spaces are starved. In the
- * future, once an interface between the CS and JS/CSF have been devised to
+ * future, once an interface between the CS and JS has been devised to
  * provide enough information about how each context is consuming GPU resources,
  * those decisions can be made in the CS itself, thereby reducing duplicated
  * code.

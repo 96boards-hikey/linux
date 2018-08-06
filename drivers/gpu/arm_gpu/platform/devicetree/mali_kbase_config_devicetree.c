@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2015, 2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -29,3 +29,14 @@ struct kbase_platform_config *kbase_get_platform_config(void)
 {
 	return &dummy_platform_config;
 }
+
+#ifndef CONFIG_OF
+int kbase_platform_register(void)
+{
+	return 0;
+}
+
+void kbase_platform_unregister(void)
+{
+}
+#endif

@@ -46,6 +46,16 @@ typedef enum {
 
 #define HARD_RESET_AT_POWER_OFF 0
 
+static inline void kbase_os_reg_write(struct kbase_device *kbdev, u16 offset, u32 value)
+{
+	writel(value, kbdev->reg + offset);
+}
+
+static inline u32 kbase_os_reg_read(struct kbase_device *kbdev, u16 offset)
+{
+	return readl(kbdev->reg + offset);
+}
+
 #ifndef CONFIG_OF
 static struct kbase_io_resources io_resources = {
 	.job_irq_number = 68,

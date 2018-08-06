@@ -69,21 +69,22 @@ struct kbase_ipa_model_vinstr_data {
  *                      Coefficients are interpreted as fractions where the
  *                      denominator is 1000000.
  * @op:                 which operation to be performed on the counter values
- * @counter:            counter used to calculate energy for IPA group
+ * @counter_block_offset:  block offset in bytes of the counter used to calculate energy for IPA group
  */
 struct kbase_ipa_group {
 	char name[KBASE_IPA_MAX_GROUP_NAME_LEN + 1];
 	s32 default_value;
 	s64 (*op)(struct kbase_ipa_model_vinstr_data *, s32, u32);
-	u32 counter;
+	u32 counter_block_offset;
 };
 
-/*
+/**
  * sum_all_shader_cores() - sum a counter over all cores
  * @model_data		pointer to model data
  * @coeff		model coefficient. Unity is ~2^20, so range approx
  * +/- 4.0: -2^22 < coeff < 2^22
-
+ * @counter     offset in bytes of the counter used to calculate energy for IPA group
+ *
  * Calculate energy estimation based on hardware counter `counter'
  * across all shader cores.
  *
@@ -93,12 +94,13 @@ s64 kbase_ipa_sum_all_shader_cores(
 	struct kbase_ipa_model_vinstr_data *model_data,
 	s32 coeff, u32 counter);
 
-/*
+/**
  * sum_single_counter() - sum a single counter
  * @model_data		pointer to model data
  * @coeff		model coefficient. Unity is ~2^20, so range approx
  * +/- 4.0: -2^22 < coeff < 2^22
-
+ * @counter     offset in bytes of the counter used to calculate energy for IPA group
+ *
  * Calculate energy estimation based on hardware counter `counter'.
  *
  * Return: Counter value. Range: -2^34 < ret < 2^34
@@ -107,7 +109,7 @@ s64 kbase_ipa_single_counter(
 	struct kbase_ipa_model_vinstr_data *model_data,
 	s32 coeff, u32 counter);
 
-/*
+/**
  * attach_vinstr() - attach a vinstr_buffer to an IPA model.
  * @model_data		pointer to model data
  *
@@ -119,7 +121,7 @@ s64 kbase_ipa_single_counter(
  */
 int kbase_ipa_attach_vinstr(struct kbase_ipa_model_vinstr_data *model_data);
 
-/*
+/**
  * detach_vinstr() - detach a vinstr_buffer from an IPA model.
  * @model_data		pointer to model data
  *

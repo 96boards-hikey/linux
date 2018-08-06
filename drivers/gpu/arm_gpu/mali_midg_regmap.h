@@ -92,6 +92,7 @@
 #define TEXTURE_FEATURES_0      0x0B0	/* (RO) Support flags for indexed texture formats 0..31 */
 #define TEXTURE_FEATURES_1      0x0B4	/* (RO) Support flags for indexed texture formats 32..63 */
 #define TEXTURE_FEATURES_2      0x0B8	/* (RO) Support flags for indexed texture formats 64..95 */
+#define TEXTURE_FEATURES_3      0x0BC	/* (RO) Support flags for texture order */
 
 #define TEXTURE_FEATURES_REG(n) GPU_CONTROL_REG(TEXTURE_FEATURES_0 + ((n) << 2))
 
@@ -163,7 +164,7 @@
 #define L2_PWROFF_HI            0x1E4	/* (WO) Level 2 cache power off bitmap, high word */
 
 #define STACK_PWROFF_LO         0xE30   /* (RO) Core stack power off bitmap, low word */
-#define STACK_PRWOFF_HI         0xE34   /* (RO) Core stack power off bitmap, high word */
+#define STACK_PWROFF_HI         0xE34   /* (RO) Core stack power off bitmap, high word */
 
 
 #define SHADER_PWRTRANS_LO      0x200	/* (RO) Shader core power transition bitmap, low word */
@@ -176,7 +177,7 @@
 #define L2_PWRTRANS_HI          0x224	/* (RO) Level 2 cache power transition bitmap, high word */
 
 #define STACK_PWRTRANS_LO       0xE40   /* (RO) Core stack power transition bitmap, low word */
-#define STACK_PRWTRANS_HI       0xE44   /* (RO) Core stack power transition bitmap, high word */
+#define STACK_PWRTRANS_HI       0xE44   /* (RO) Core stack power transition bitmap, high word */
 
 
 #define SHADER_PWRACTIVE_LO     0x240	/* (RO) Shader core active bitmap, low word */
@@ -513,9 +514,8 @@
 /* Set to write back memory, outer caching */
 #define AS_MEMATTR_LPAE_OUTER_WA              0x8Dull
 
-/* Symbol for default MEMATTR to use */
-
-/* Default is - HW implementation defined caching */
+/* Symbols for default MEMATTR to use
+ * Default is - HW implementation defined caching */
 #define AS_MEMATTR_INDEX_DEFAULT               0
 #define AS_MEMATTR_INDEX_DEFAULT_ACE           3
 
@@ -558,6 +558,13 @@
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_OCTANT      (0x1 << L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_SHIFT)
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_QUARTER     (0x2 << L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_SHIFT)
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_HALF        (0x3 << L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_SHIFT)
+
+#define L2_MMU_CONFIG_3BIT_LIMIT_EXTERNAL_READS_SHIFT      (12)
+#define L2_MMU_CONFIG_3BIT_LIMIT_EXTERNAL_READS            (0x7 << L2_MMU_CONFIG_LIMIT_EXTERNAL_READS_SHIFT)
+
+#define L2_MMU_CONFIG_3BIT_LIMIT_EXTERNAL_WRITES_SHIFT     (15)
+#define L2_MMU_CONFIG_3BIT_LIMIT_EXTERNAL_WRITES           (0x7 << L2_MMU_CONFIG_LIMIT_EXTERNAL_WRITES_SHIFT)
+
 /* End L2_MMU_CONFIG register */
 
 /* THREAD_* registers */
@@ -585,6 +592,7 @@
 #define SC_SDC_DISABLE_OQ_DISCARD   (1ul << 6)
 #define SC_LS_ALLOW_ATTR_TYPES      (1ul << 16)
 #define SC_LS_PAUSEBUFFER_DISABLE   (1ul << 16)
+#define SC_TLS_HASH_ENABLE          (1ul << 17)
 #define SC_LS_ATTR_CHECK_DISABLE    (1ul << 18)
 #define SC_ENABLE_TEXGRD_FLAGS      (1ul << 25)
 /* End SHADER_CONFIG register */

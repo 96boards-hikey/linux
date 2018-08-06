@@ -26,6 +26,9 @@ extern "C" {
 
 #define KBASE_IOCTL_TYPE 0x80
 
+#define BASE_UK_VERSION_MAJOR 11
+#define BASE_UK_VERSION_MINOR 0
+
 #ifdef ANDROID
 /* Android's definition of ioctl is incorrect, specifying the type argument as
  * 'int'. This creates a warning when using _IOWR (as the top bit is set). Work
@@ -246,6 +249,7 @@ struct kbase_ioctl_disjoint_query {
  * struct kbase_ioctl_get_ddk_version - Query the kernel version
  * @version_buffer: Buffer to receive the kernel version string
  * @size: Size of the buffer
+ * @padding: Padding
  *
  * The ioctl will return the number of bytes written into version_buffer
  * (which includes a NULL byte) or a negative error code
@@ -253,6 +257,7 @@ struct kbase_ioctl_disjoint_query {
 struct kbase_ioctl_get_ddk_version {
 	__u64 version_buffer;
 	__u32 size;
+	__u32 padding;
 };
 
 #define KBASE_IOCTL_GET_DDK_VERSION \
@@ -325,7 +330,7 @@ union kbase_ioctl_mem_find_cpu_offset {
  * @id: The kernel context ID
  */
 struct kbase_ioctl_get_context_id {
-	int id; /* This should really be __u32, but see GPUCORE-10048 */
+	__u32 id;
 };
 
 #define KBASE_IOCTL_GET_CONTEXT_ID \
@@ -472,10 +477,12 @@ struct kbase_ioctl_fence_validate {
  * struct kbase_ioctl_get_profiling_controls - Get the profiling controls
  * @count: The size of @buffer in u32 words
  * @buffer: The buffer to receive the profiling controls
+ * @padding: Padding
  */
 struct kbase_ioctl_get_profiling_controls {
 	__u64 buffer;
 	__u32 count;
+	__u32 padding;
 };
 
 #define KBASE_IOCTL_GET_PROFILING_CONTROLS \
@@ -650,6 +657,9 @@ struct kbase_ioctl_tlstream_stats {
 #define KBASE_GPUPROP_COHERENCY_GROUP_13		77
 #define KBASE_GPUPROP_COHERENCY_GROUP_14		78
 #define KBASE_GPUPROP_COHERENCY_GROUP_15		79
+
+#define KBASE_GPUPROP_TEXTURE_FEATURES_3		80
+#define KBASE_GPUPROP_RAW_TEXTURE_FEATURES_3		81
 
 #ifdef __cpluscplus
 }

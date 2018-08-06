@@ -32,9 +32,9 @@
 #include <mali_base_hwconfig_issues.h>
 #include <mali_kbase_mem_lowlevel.h>
 #include <mali_kbase_mmu_hw.h>
-#include <mali_kbase_mmu_mode.h>
 #include <mali_kbase_instr_defs.h>
 #include <mali_kbase_pm.h>
+#include <mali_kbase_gpuprops_types.h>
 #include <protected_mode_switcher.h>
 
 #include <linux/atomic.h>
@@ -47,10 +47,6 @@
 #include <linux/bus_logger.h>
 #endif
 
-
-#ifdef CONFIG_KDS
-#include <linux/kds.h>
-#endif				/* CONFIG_KDS */
 
 #if defined(CONFIG_SYNC)
 #include <sync.h>
@@ -222,6 +218,12 @@
 #define KBASE_SERIALIZE_INTER_SLOT (1 << 1)
 /* Reset the GPU after each atom completion */
 #define KBASE_SERIALIZE_RESET (1 << 2)
+
+/* Forward declarations */
+struct kbase_context;
+struct kbase_device;
+struct kbase_as;
+struct kbase_mmu_setup;
 
 #ifdef CONFIG_DEBUG_FS
 struct base_job_fault_event {
@@ -435,11 +437,6 @@ struct kbase_jd_atom {
 	u64 affinity;
 	u64 jc;
 	enum kbase_atom_coreref_state coreref_state;
-#ifdef CONFIG_KDS
-	struct list_head node;
-	struct kds_resource_set *kds_rset;
-	bool kds_dep_satisfied;
-#endif				/* CONFIG_KDS */
 #if defined(CONFIG_SYNC)
 	/* Stores either an input or output fence, depending on soft-job type */
 	struct sync_fence *fence;
@@ -650,9 +647,6 @@ struct kbase_jd_context {
 	u32 *tb;
 	size_t tb_wrap_offset;
 
-#ifdef CONFIG_KDS
-	struct kds_callback kds_cb;
-#endif				/* CONFIG_KDS */
 #ifdef CONFIG_GPU_TRACEPOINTS
 	atomic_t work_id;
 #endif
@@ -946,6 +940,24 @@ struct kbase_devfreq_opp {
 	u64 core_mask;
 };
 
+struct kbase_mmu_mode {
+	void (*update)(struct kbase_context *kctx);
+	void (*get_as_setup)(struct kbase_context *kctx,
+			struct kbase_mmu_setup * const setup);
+	void (*disable_as)(struct kbase_device *kbdev, int as_nr);
+	phys_addr_t (*pte_to_phy_addr)(u64 entry);
+	int (*ate_is_valid)(u64 ate, unsigned int level);
+	int (*pte_is_valid)(u64 pte, unsigned int level);
+	void (*entry_set_ate)(u64 *entry, struct tagged_addr phy,
+			unsigned long flags, unsigned int level);
+	void (*entry_set_pte)(u64 *entry, phys_addr_t phy);
+	void (*entry_invalidate)(u64 *entry);
+};
+
+struct kbase_mmu_mode const *kbase_mmu_mode_get_lpae(void);
+struct kbase_mmu_mode const *kbase_mmu_mode_get_aarch64(void);
+
+
 #define DEVNAME_SIZE	16
 
 struct kbase_device {
@@ -962,10 +974,6 @@ struct kbase_device {
 	u64 reg_start;
 	size_t reg_size;
 	void __iomem *reg;
-
-	void __iomem *crgreg;
-	void __iomem *pmctrlreg;
-	void __iomem *pctrlreg;
 
 	struct {
 		int irq;
@@ -1268,11 +1276,6 @@ struct kbase_device {
 
 	/* Current serialization mode. See KBASE_SERIALIZE_* for details */
 	u8 serialize_jobs;
-
-	/* gpu virtual id */
-	u32 gpu_vid;
-
-	unsigned long hi_features_mask[2];
 };
 
 /**
@@ -1355,7 +1358,7 @@ struct kbase_sub_alloc {
 struct kbase_context {
 	struct file *filp;
 	struct kbase_device *kbdev;
-	int id; /* System wide unique id */
+	u32 id; /* System wide unique id */
 	unsigned long api_version;
 	phys_addr_t pgd;
 	struct list_head event_list;
@@ -1406,9 +1409,6 @@ struct kbase_context {
 
 	struct list_head waiting_soft_jobs;
 	spinlock_t waiting_soft_jobs_lock;
-#ifdef CONFIG_KDS
-	struct list_head waiting_kds_resource;
-#endif
 #ifdef CONFIG_MALI_DMA_FENCE
 	struct {
 		struct list_head waiting_resource;

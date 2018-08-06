@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2014 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2014, 2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -23,8 +23,6 @@
 #include <mali_kbase_config.h>
 #include "mali_kbase_cpu_vexpress.h"
 
-#define HARD_RESET_AT_POWER_OFF 0
-
 #ifndef CONFIG_OF
 static struct kbase_io_resources io_resources = {
 	.job_irq_number = 75,
@@ -44,17 +42,6 @@ static int pm_callback_power_on(struct kbase_device *kbdev)
 
 static void pm_callback_power_off(struct kbase_device *kbdev)
 {
-#if HARD_RESET_AT_POWER_OFF
-	/* Cause a GPU hard reset to test whether we have actually idled the GPU
-	 * and that we properly reconfigure the GPU on power up.
-	 * Usually this would be dangerous, but if the GPU is working correctly it should
-	 * be completely safe as the GPU should not be active at this point.
-	 * However this is disabled normally because it will most likely interfere with
-	 * bus logging etc.
-	 */
-	KBASE_TRACE_ADD(kbdev, CORE_GPU_HARD_RESET, NULL, NULL, 0u, 0);
-	kbase_os_reg_write(kbdev, GPU_CONTROL_REG(GPU_COMMAND), GPU_COMMAND_HARD_RESET);
-#endif
 }
 
 struct kbase_pm_callback_conf pm_callbacks = {

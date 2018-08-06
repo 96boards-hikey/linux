@@ -35,6 +35,9 @@
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
 #include <linux/sched.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+#include <linux/sched/mm.h>
+#endif
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
@@ -42,7 +45,6 @@
 #include <linux/workqueue.h>
 
 #include "mali_base_kernel.h"
-#include <mali_kbase_uku.h>
 #include <mali_kbase_linux.h>
 
 /*
@@ -218,10 +220,6 @@ void kbase_device_trace_register_access(struct kbase_context *kctx, enum kbase_r
 int kbase_device_trace_buffer_install(
 		struct kbase_context *kctx, u32 *tb, size_t size);
 void kbase_device_trace_buffer_uninstall(struct kbase_context *kctx);
-
-/* api to be ported per OS, only need to do the raw register access */
-void kbase_os_reg_write(struct kbase_device *kbdev, u16 offset, u32 value);
-u32 kbase_os_reg_read(struct kbase_device *kbdev, u16 offset);
 
 void kbasep_as_do_poke(struct work_struct *work);
 

@@ -1,5 +1,5 @@
 #
-# (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2012-2013, 2017 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -18,8 +18,6 @@
 # Add your platform specific Kconfig file here
 #
 # "drivers/gpu/arm/midgard/platform/xxx/Kconfig"
-source "drivers/gpu/arm_gpu/platform/hisilicon/Kconfig"
 #
-# Where xxx is the platform name is the name set in MALI_PLATFORM_THIRDPARTY_NAME
+# Where xxx is the platform name is the name set in MALI_PLATFORM_NAME
 #
-

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -24,14 +24,6 @@
 #include <mali_kbase_hwaccess_jm.h>
 #include <backend/gpu/mali_kbase_jm_internal.h>
 #include <backend/gpu/mali_kbase_js_internal.h>
-
-/*
- * Define for when dumping is enabled.
- * This should not be based on the instrumentation level as whether dumping is
- * enabled for a particular level is down to the integrator. However this is
- * being used for now as otherwise the cinstr headers would be needed.
- */
-#define CINSTR_DUMPING_ENABLED (2 == MALI_INSTRUMENTATION_LEVEL)
 
 /*
  * Hold the runpool_mutex for this
@@ -119,7 +111,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 			if (!kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_5736)) {
 				u32 ticks = atom->ticks++;
 
-#if !CINSTR_DUMPING_ENABLED
+#ifndef CONFIG_MALI_JOB_DUMP
 				u32 soft_stop_ticks, hard_stop_ticks,
 								gpu_reset_ticks;
 				if (atom->core_req & BASE_JD_REQ_ONLY_COMPUTE) {
@@ -209,8 +201,8 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#else				/* !CINSTR_DUMPING_ENABLED */
-				/* NOTE: During CINSTR_DUMPING_ENABLED, we use
+#else				/* !CONFIG_MALI_JOB_DUMP */
+				/* NOTE: During CONFIG_MALI_JOB_DUMP, we use
 				 * the alternate timeouts, which makes the hard-
 				 * stop and GPU reset timeout much longer. We
 				 * also ensure that we don't soft-stop at all.
@@ -219,7 +211,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					/* Job has been scheduled for at least
 					 * js_devdata->soft_stop_ticks. We do
 					 * not soft-stop during
-					 * CINSTR_DUMPING_ENABLED, however.
+					 * CONFIG_MALI_JOB_DUMP, however.
 					 */
 					dev_dbg(kbdev->dev, "Soft-stop");
 				} else if (ticks ==
@@ -248,7 +240,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#endif				/* !CINSTR_DUMPING_ENABLED */
+#endif				/* !CONFIG_MALI_JOB_DUMP */
 			}
 		}
 	}

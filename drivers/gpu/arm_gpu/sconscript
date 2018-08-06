@@ -20,19 +20,13 @@ SConscript( 'tests/sconscript' )
 
 mock_test = 0
 
-# Fake platform is a transient solution for GPL drivers running in kernel that does not provide configuration via platform data.
-# For such kernels fake_platform_device should be set to 1. For kernels providing platform data fake_platform_device should be set to 0.
-if env['platform_config']=='devicetree' or env['platform_config']=='juno_soc':
-	fake_platform_device = 0
-else:
-	fake_platform_device = 1
-
 # Source files required for kbase.
 kbase_src = [
 	Glob('*.c'),
 	Glob('backend/*/*.c'),
 	Glob('internal/*/*.c'),
-	Glob('ipa/*.c')
+	Glob('ipa/*.c'),
+	Glob('platform/%s/*.c' % env['platform_config']),
 ]
 
 if env['platform_config']=='juno_soc':
@@ -44,20 +38,7 @@ if Glob('#kernel/drivers/gpu/arm/midgard/tests/internal/src/mock') and env['unit
 	kbase_src += [Glob('#kernel/drivers/gpu/arm/midgard/tests/internal/src/mock/*.c')]
 	mock_test = 1
 
-# we need platform config for GPL version using fake platform
-if fake_platform_device==1:
-	# Check if we are compiling for PBX
-	if env.KernelConfigEnabled("CONFIG_MACH_REALVIEW_PBX") and \
-	   env["platform_config"] in {"vexpress", "vexpress_6xvirtex7_10mhz"}:
-		sys.stderr.write("WARNING: Building for a PBX kernel but with platform_config=vexpress*\n")
-	# if the file platform config file is in the tpip directory then use that, otherwise use the default config directory
-	if Glob('#kernel/drivers/gpu/arm/midgard/config/tpip/*%s.c' % (env['platform_config'])):
-		kbase_src += Glob('#kernel/drivers/gpu/arm/midgard/config/tpip/*%s.c' % (env['platform_config']))
-	else:
-		kbase_src += Glob('#kernel/drivers/gpu/arm/midgard/config/*%s.c' % (env['platform_config']))
-
-make_args = env.kernel_get_config_defines(ret_list = True,
-                                          fake = fake_platform_device) + [
+make_args = env.kernel_get_config_defines(ret_list = True) + [
 	'PLATFORM=%s' % env['platform'],
 	'MALI_ERROR_INJECT_ON=%s' % env['error_inject'],
 	'MALI_KERNEL_TEST_API=%s' % env['debug'],
@@ -65,20 +46,11 @@ make_args = env.kernel_get_config_defines(ret_list = True,
 	'MALI_RELEASE_NAME=%s' % env['mali_release_name'],
 	'MALI_MOCK_TEST=%s' % mock_test,
 	'MALI_CUSTOMER_RELEASE=%s' % env['release'],
-	'MALI_INSTRUMENTATION_LEVEL=%s' % env['instr'],
 	'MALI_COVERAGE=%s' % env['coverage'],
-	'MALI_BUS_LOG=%s' % env['buslog']
 ]
 
 kbase = env.BuildKernelModule('$STATIC_LIB_PATH/mali_kbase.ko', kbase_src,
                               make_args = make_args)
-
-# Add a dependency on kds.ko.
-# Only necessary when KDS is not built into the kernel.
-#
-if env['os'] != 'android':
-	if not env.KernelConfigEnabled("CONFIG_KDS"):
-		env.Depends(kbase, '$STATIC_LIB_PATH/kds.ko')
 
 # need Module.symvers from ump.ko build
 if int(env['ump']) == 1:

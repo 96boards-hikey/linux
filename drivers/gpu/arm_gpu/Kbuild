@@ -15,14 +15,14 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r7p0-01rel0"
+MALI_RELEASE_NAME ?= "r9p0-01rel0"
 
 # Paths required for build
 KBASE_PATH = $(src)
 KBASE_PLATFORM_PATH = $(KBASE_PATH)/platform_dummy
 UMP_PATH = $(src)/../../../base
 
-ifeq ($(CONFIG_MALI_ERROR_INJECTION),y)
+ifeq ($(CONFIG_MALI_ERROR_INJECT),y)
 MALI_ERROR_INJECT_ON = 1
 endif
 
@@ -33,7 +33,7 @@ MALI_KERNEL_TEST_API ?= 0
 MALI_ERROR_INJECT_ON ?= 0
 MALI_MOCK_TEST ?= 0
 MALI_COVERAGE ?= 0
-MALI_INSTRUMENTATION_LEVEL ?= 0
+CONFIG_MALI_PLATFORM_NAME ?= "devicetree"
 # This workaround is for what seems to be a compiler bug we observed in
 # GCC 4.7 on AOSP 4.3.  The bug caused an intermittent failure compiling
 # the "_Pragma" syntax, where an error message is returned:
@@ -54,16 +54,15 @@ DEFINES = \
 	-DMALI_ERROR_INJECT_ON=$(MALI_ERROR_INJECT_ON) \
 	-DMALI_MOCK_TEST=$(MALI_MOCK_TEST) \
 	-DMALI_COVERAGE=$(MALI_COVERAGE) \
-	-DMALI_INSTRUMENTATION_LEVEL=$(MALI_INSTRUMENTATION_LEVEL) \
 	-DMALI_RELEASE_NAME=\"$(MALI_RELEASE_NAME)\" \
 	-DMALI_GCC_WORKAROUND_MIDCOM_4598=$(MALI_GCC_WORKAROUND_MIDCOM_4598)
 
 ifeq ($(KBUILD_EXTMOD),)
 # in-tree
-DEFINES +=-DMALI_KBASE_THIRDPARTY_PATH=../../$(src)/platform/$(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME)
+DEFINES +=-DMALI_KBASE_PLATFORM_PATH=../../$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
 else
 # out-of-tree
-DEFINES +=-DMALI_KBASE_THIRDPARTY_PATH=$(src)/platform/$(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME)
+DEFINES +=-DMALI_KBASE_PLATFORM_PATH=$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
 endif
 
 DEFINES += -I$(srctree)/drivers/staging/android
@@ -128,51 +127,17 @@ endif
 
 ccflags-y += -I$(KBASE_PATH)
 
-ifeq ($(CONFIG_MALI_PLATFORM_FAKE),y)
-	SRC += mali_kbase_platform_fake.c
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
-		SRC += platform/vexpress/mali_kbase_config_vexpress.c \
-		platform/vexpress/mali_kbase_cpu_vexpress.c
-		ccflags-y += -I$(src)/platform/vexpress
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_RTSM_VE),y)
-		SRC += platform/rtsm_ve/mali_kbase_config_vexpress.c
-		ccflags-y += -I$(src)/platform/rtsm_ve
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_1XV7_A57),y)
-		SRC += platform/vexpress_1xv7_a57/mali_kbase_config_vexpress.c
-		ccflags-y += -I$(src)/platform/vexpress_1xv7_a57
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_6XVIRTEX7_10MHZ),y)
-		SRC += platform/vexpress_6xvirtex7_10mhz/mali_kbase_config_vexpress.c \
-		platform/vexpress_6xvirtex7_10mhz/mali_kbase_cpu_vexpress.c
-		ccflags-y += -I$(src)/platform/vexpress_6xvirtex7_10mhz
-	endif
-endif # CONFIG_MALI_PLATFORM_FAKE=y
-
-
-ifeq ($(CONFIG_MALI_PLATFORM_HISILICON),y)
-	SRC += platform/hisilicon/mali_kbase_config_hisilicon.c
-	ccflags-y += -I$(src)/platform/hisilicon
-endif
-
 # Tell the Linux build system from which .o file to create the kernel module
 obj-$(CONFIG_MALI_MIDGARD) += mali_kbase.o
 
 # Tell the Linux build system to enable building of our .c files
 mali_kbase-y := $(SRC:.c=.o)
 
-ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
-  # Kconfig passes in the name with quotes for in-tree builds - remove them.
-  platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-  MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
-  ccflags-y += -I$(src)/$(MALI_PLATFORM_THIRDPARTY_DIR)
-  include $(src)/$(MALI_PLATFORM_THIRDPARTY_DIR)/Kbuild
-endif
+# Kconfig passes in the name with quotes for in-tree builds - remove them.
+platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_NAME))
+MALI_PLATFORM_DIR := platform/$(platform_name)
+ccflags-y += -I$(src)/$(MALI_PLATFORM_DIR)
+include $(src)/$(MALI_PLATFORM_DIR)/Kbuild
 
 ifeq ($(CONFIG_MALI_DEVFREQ),y)
   ifeq ($(CONFIG_DEVFREQ_THERMAL),y)
@@ -191,34 +156,17 @@ mali_kbase-$(CONFIG_SYNC_FILE) += \
 	mali_kbase_sync_common.o \
 	mali_kbase_fence.o
 
-MALI_BACKEND_PATH ?= backend
-CONFIG_MALI_BACKEND ?= gpu
-CONFIG_MALI_BACKEND_REAL ?= $(CONFIG_MALI_BACKEND)
-
 ifeq ($(MALI_MOCK_TEST),1)
-ifeq ($(CONFIG_MALI_BACKEND_REAL),gpu)
 # Test functionality
 mali_kbase-y += tests/internal/src/mock/mali_kbase_pm_driver_mock.o
 endif
-endif
 
-include  $(src)/$(MALI_BACKEND_PATH)/$(CONFIG_MALI_BACKEND_REAL)/Kbuild
+include  $(src)/backend/gpu/Kbuild
 mali_kbase-y += $(BACKEND:.c=.o)
 
 
-ccflags-y += -I$(src)/$(MALI_BACKEND_PATH)/$(CONFIG_MALI_BACKEND_REAL)
-subdir-ccflags-y += -I$(src)/$(MALI_BACKEND_PATH)/$(CONFIG_MALI_BACKEND_REAL)
-
-# Default to devicetree platform if neither a fake platform or a thirdparty
-# platform is configured.
-ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY)$(CONFIG_MALI_PLATFORM_FAKE),)
-CONFIG_MALI_PLATFORM_DEVICETREE := y
-endif
-
-mali_kbase-$(CONFIG_MALI_PLATFORM_DEVICETREE) += \
-	platform/devicetree/mali_kbase_runtime_pm.o \
-	platform/devicetree/mali_kbase_config_devicetree.o
-ccflags-$(CONFIG_MALI_PLATFORM_DEVICETREE) += -I$(src)/platform/devicetree
+ccflags-y += -I$(src)/backend/gpu
+subdir-ccflags-y += -I$(src)/backend/gpu
 
 # For kutf and mali_kutf_irq_latency_test
-# obj-$(CONFIG_MALI_KUTF) += tests/
+obj-$(CONFIG_MALI_KUTF) += tests/

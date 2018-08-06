@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2014, 2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2014, 2016-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -14,8 +14,6 @@
  */
 
 
-
-#ifdef CONFIG_MALI_PLATFORM_FAKE
 
 #include <linux/errno.h>
 #include <linux/export.h>
@@ -74,7 +72,7 @@ static void kbasep_config_parse_io_resources(const struct kbase_io_resources *io
 }
 #endif /* CONFIG_OF */
 
-int kbase_platform_fake_register(void)
+int kbase_platform_register(void)
 {
 	struct kbase_platform_config *config;
 #ifndef CONFIG_OF
@@ -111,14 +109,11 @@ int kbase_platform_fake_register(void)
 
 	return 0;
 }
-EXPORT_SYMBOL(kbase_platform_fake_register);
+EXPORT_SYMBOL(kbase_platform_register);
 
-void kbase_platform_fake_unregister(void)
+void kbase_platform_unregister(void)
 {
 	if (mali_device)
 		platform_device_unregister(mali_device);
 }
-EXPORT_SYMBOL(kbase_platform_fake_unregister);
-
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
-
+EXPORT_SYMBOL(kbase_platform_unregister);
