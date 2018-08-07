@@ -24,6 +24,7 @@
 #if defined(CONFIG_SYNC) || defined(CONFIG_SYNC_FILE)
 #include <mali_kbase_sync.h>
 #endif
+#include <mali_kbase_ioctl.h>
 
 struct kbase_jd_debugfs_depinfo {
 	u8 id;

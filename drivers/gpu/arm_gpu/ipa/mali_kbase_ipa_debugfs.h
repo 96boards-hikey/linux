@@ -31,6 +31,20 @@ int kbase_ipa_model_param_add(struct kbase_ipa_model *model, const char *name,
 			      enum kbase_ipa_model_param_type type);
 void kbase_ipa_model_param_free_all(struct kbase_ipa_model *model);
 
+/**
+ * kbase_ipa_model_param_set_s32 - Set an integer model parameter
+ *
+ * @model:	pointer to IPA model
+ * @name:	name of corresponding debugfs entry
+ * @val:	new value of the parameter
+ *
+ * This function is only exposed for use by unit tests running in
+ * kernel space. Normally it is expected that parameter values will
+ * instead be set via debugfs.
+ */
+void kbase_ipa_model_param_set_s32(struct kbase_ipa_model *model,
+	const char *name, s32 val);
+
 #else /* CONFIG_DEBUG_FS */
 
 static inline int kbase_ipa_model_param_add(struct kbase_ipa_model *model,

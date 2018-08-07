@@ -24,12 +24,6 @@
 #ifndef _BASE_KERNEL_H_
 #define _BASE_KERNEL_H_
 
-/* Support UK10_2 IOCTLS */
-#define BASE_LEGACY_UK10_2_SUPPORT 1
-
-/* Support UK10_4 IOCTLS */
-#define BASE_LEGACY_UK10_4_SUPPORT 1
-
 typedef struct base_mem_handle {
 	struct {
 		u64 handle;
@@ -48,17 +42,11 @@ typedef struct base_mem_handle {
  */
 #define BASE_JD_ATOM_COUNT              256
 
-#define BASEP_JD_SEM_PER_WORD_LOG2      5
-#define BASEP_JD_SEM_PER_WORD           (1 << BASEP_JD_SEM_PER_WORD_LOG2)
-#define BASEP_JD_SEM_WORD_NR(x)         ((x) >> BASEP_JD_SEM_PER_WORD_LOG2)
-#define BASEP_JD_SEM_MASK_IN_WORD(x)    (1 << ((x) & (BASEP_JD_SEM_PER_WORD - 1)))
-#define BASEP_JD_SEM_ARRAY_SIZE         BASEP_JD_SEM_WORD_NR(BASE_JD_ATOM_COUNT)
-
 /* Set/reset values for a software event */
 #define BASE_JD_SOFT_EVENT_SET             ((unsigned char)1)
 #define BASE_JD_SOFT_EVENT_RESET           ((unsigned char)0)
 
-#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
+#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 4
 
 #define BASE_MAX_COHERENT_GROUPS 16
 
@@ -187,11 +175,18 @@ typedef u32 base_mem_alloc_flags;
  */
 #define BASE_MEM_IMPORT_SHARED ((base_mem_alloc_flags)1 << 18)
 
+/**
+ * Bit 19 is reserved.
+ *
+ * Do not remove, use the next unreserved bit for new flags
+ **/
+#define BASE_MEM_RESERVED_BIT_19 ((base_mem_alloc_flags)1 << 19)
+
 /* Number of bits used as flags for base memory management
  *
  * Must be kept in sync with the base_mem_alloc_flags flags
  */
-#define BASE_MEM_FLAGS_NR_BITS 19
+#define BASE_MEM_FLAGS_NR_BITS 20
 
 /* A mask for all output bits, excluding IN/OUT bits.
  */
@@ -918,13 +913,21 @@ static inline void base_jd_atom_dep_copy(struct base_dependency *dep,
  * be set to trigger when a GPU job has finished.
  *
  * The base fence object must not be terminated until the atom
- * has been submitted to @a base_jd_submit and @a base_jd_submit has returned.
+ * has been submitted to @ref base_jd_submit and @ref base_jd_submit
+ * has returned.
  *
  * @a fence must be a valid fence set up with @a base_fence_init.
  * Calling this function with a uninitialized fence results in undefined behavior.
  *
  * @param[out] atom A pre-allocated atom to configure as a fence trigger SW atom
  * @param[in] fence The base fence object to trigger.
+ *
+ * @pre @p fence must reference a @ref base_fence successfully initialized by
+ *      calling @ref base_fence_init.
+ * @pre @p fence was @e not initialized by calling @ref base_fence_import, nor
+ *      is it associated with a fence-trigger job that was already submitted
+ *      by calling @ref base_jd_submit.
+ * @post @p atom can be submitted by calling @ref base_jd_submit.
  */
 static inline void base_jd_fence_trigger_setup_v2(struct base_jd_atom_v2 *atom, struct base_fence *fence)
 {
@@ -947,13 +950,17 @@ static inline void base_jd_fence_trigger_setup_v2(struct base_jd_atom_v2 *atom, 
  * be set to block a GPU job until it has been triggered.
  *
  * The base fence object must not be terminated until the atom
- * has been submitted to @a base_jd_submit and @a base_jd_submit has returned.
- *
- * @a fence must be a valid fence set up with @a base_fence_init or @a base_fence_import.
- * Calling this function with a uninitialized fence results in undefined behavior.
+ * has been submitted to @ref base_jd_submit and
+ * @ref base_jd_submit has returned.
  *
  * @param[out] atom A pre-allocated atom to configure as a fence wait SW atom
  * @param[in] fence The base fence object to wait on
+ *
+ * @pre @p fence must reference a @ref base_fence successfully initialized by
+ *      calling @ref base_fence_import, or it must be associated with a
+ *      fence-trigger job that was already submitted by calling
+ *      @ref base_jd_submit.
+ * @post @p atom can be submitted by calling @ref base_jd_submit.
  */
 static inline void base_jd_fence_wait_setup_v2(struct base_jd_atom_v2 *atom, struct base_fence *fence)
 {
@@ -1152,22 +1159,15 @@ typedef struct base_jd_event_v2 {
 } base_jd_event_v2;
 
 /**
- * Padding required to ensure that the @ref struct base_dump_cpu_gpu_counters structure fills
- * a full cache line.
- */
-
-#define BASE_CPU_GPU_CACHE_LINE_PADDING (36)
-
-
-/**
  * @brief Structure for BASE_JD_REQ_SOFT_DUMP_CPU_GPU_COUNTERS jobs.
  *
- * This structure is stored into the memory pointed to by the @c jc field of @ref base_jd_atom.
+ * This structure is stored into the memory pointed to by the @c jc field
+ * of @ref base_jd_atom.
  *
- * This structure must be padded to ensure that it will occupy whole cache lines. This is to avoid
- * cases where access to pages containing the structure is shared between cached and un-cached
- * memory regions, which would cause memory corruption.  Here we set the structure size to be 64 bytes
- * which is the cache line for ARM A15 processors.
+ * It must not occupy the same CPU cache line(s) as any neighboring data.
+ * This is to avoid cases where access to pages containing the structure
+ * is shared between cached and un-cached memory regions, which would
+ * cause memory corruption.
  */
 
 typedef struct base_dump_cpu_gpu_counters {
@@ -1175,10 +1175,8 @@ typedef struct base_dump_cpu_gpu_counters {
 	u64 cycle_counter;
 	u64 sec;
 	u32 usec;
-	u8 padding[BASE_CPU_GPU_CACHE_LINE_PADDING];
+	u8 padding[36];
 } base_dump_cpu_gpu_counters;
-
-
 
 /** @} end group base_user_api_job_dispatch */
 
@@ -1399,7 +1397,7 @@ typedef struct base_dump_cpu_gpu_counters {
  * @{
  */
 
-#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
+#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 4
 
 #define BASE_MAX_COHERENT_GROUPS 16
 
@@ -1595,7 +1593,7 @@ struct gpu_raw_gpu_props {
 	u32 js_present;
 	u32 js_features[GPU_MAX_JOB_SLOTS];
 	u32 tiler_features;
-	u32 texture_features[3];
+	u32 texture_features[BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS];
 
 	u32 gpu_id;
 
@@ -1761,20 +1759,6 @@ typedef struct base_jd_replay_payload {
 	 */
 	base_jd_core_req fragment_core_req;
 } base_jd_replay_payload;
-
-#ifdef BASE_LEGACY_UK10_2_SUPPORT
-typedef struct base_jd_replay_payload_uk10_2 {
-	u64 tiler_jc_list;
-	u64 fragment_jc;
-	u64 tiler_heap_free;
-	u16 fragment_hierarchy_mask;
-	u16 tiler_hierarchy_mask;
-	u32 hierarchy_default_weight;
-	u16 tiler_core_req;
-	u16 fragment_core_req;
-	u8 padding[4];
-} base_jd_replay_payload_uk10_2;
-#endif /* BASE_LEGACY_UK10_2_SUPPORT */
 
 /**
  * @brief An entry in the linked list of job chains to be replayed. This must

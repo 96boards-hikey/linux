@@ -176,8 +176,13 @@ kbase_fence_add_callback(struct kbase_jd_atom *katom,
 	err = dma_fence_add_callback(fence, &kbase_fence_cb->fence_cb,
 				     callback);
 	if (err == -ENOENT) {
-		/* Fence signaled, clear the error and return */
-		err = 0;
+		/* Fence signaled, get the completion result */
+		err = dma_fence_get_status(fence);
+
+		/* remap success completion to err code */
+		if (err == 1)
+			err = 0;
+
 		kfree(kbase_fence_cb);
 	} else if (err) {
 		kfree(kbase_fence_cb);

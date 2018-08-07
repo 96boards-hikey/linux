@@ -114,9 +114,6 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 
 	INIT_LIST_HEAD(&kctx->waiting_soft_jobs);
 	spin_lock_init(&kctx->waiting_soft_jobs_lock);
-#ifdef CONFIG_KDS
-	INIT_LIST_HEAD(&kctx->waiting_kds_resource);
-#endif
 	err = kbase_dma_fence_init(kctx);
 	if (err)
 		goto free_event;
@@ -296,8 +293,6 @@ void kbase_destroy_context(struct kbase_context *kctx)
 
 	kbase_jd_exit(kctx);
 
-	kbase_pm_context_idle(kbdev);
-
 	kbase_dma_fence_term(kctx);
 
 	mutex_lock(&kbdev->mmu_hw_mutex);
@@ -318,6 +313,8 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	WARN_ON(atomic_read(&kctx->nonmapped_pages) != 0);
 
 	vfree(kctx);
+
+	kbase_pm_context_idle(kbdev);
 }
 KBASE_EXPORT_SYMBOL(kbase_destroy_context);
 

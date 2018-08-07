@@ -242,18 +242,17 @@ struct kbase_ipa_model *kbase_ipa_init_model(struct kbase_device *kbdev,
 		dev_err(kbdev->dev,
 			"init of power model \'%s\' returned error %d\n",
 			ops->name, err);
-		goto term_model;
+		kfree(model);
+		return NULL;
 	}
 
 	err = kbase_ipa_model_recalculate(model);
-	if (err)
-		goto term_model;
+	if (err) {
+		kbase_ipa_term_model(model);
+		return NULL;
+	}
 
 	return model;
-
-term_model:
-	kbase_ipa_term_model(model);
-	return NULL;
 }
 KBASE_EXPORT_TEST_API(kbase_ipa_init_model);
 
@@ -391,7 +390,7 @@ static u32 kbase_scale_dynamic_power(const u32 c, const u32 freq,
 	const u64 v2fc = (u64) c * (u64) v2f;
 
 	/* Range: 0 < v2fc / 1000 < 2^13 mW */
-	return v2fc / 1000;
+	return div_u64(v2fc, 1000);
 }
 
 /**
@@ -420,7 +419,7 @@ u32 kbase_scale_static_power(const u32 c, const u32 voltage)
 	const u64 v3c_big = (u64) c * (u64) v3;
 
 	/* Range: 0 < v3c_big / 1000000 < 2^13 mW */
-	return v3c_big / 1000000;
+	return div_u64(v3c_big, 1000000);
 }
 
 static struct kbase_ipa_model *get_current_model(struct kbase_device *kbdev)
@@ -456,9 +455,8 @@ static u32 get_static_power_locked(struct kbase_device *kbdev,
 	return power;
 }
 
-
-
-#ifdef CONFIG_MALI_PWRSOFT_765
+#if defined(CONFIG_MALI_PWRSOFT_765) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 static unsigned long kbase_get_static_power(struct devfreq *df,
 					    unsigned long voltage)
 #else
@@ -467,7 +465,8 @@ static unsigned long kbase_get_static_power(unsigned long voltage)
 {
 	struct kbase_ipa_model *model;
 	u32 power = 0;
-#ifdef CONFIG_MALI_PWRSOFT_765
+#if defined(CONFIG_MALI_PWRSOFT_765) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 	struct kbase_device *kbdev = dev_get_drvdata(&df->dev);
 #else
 	struct kbase_device *kbdev = kbase_find_device(-1);
@@ -480,14 +479,16 @@ static unsigned long kbase_get_static_power(unsigned long voltage)
 
 	mutex_unlock(&kbdev->ipa.lock);
 
-#ifndef CONFIG_MALI_PWRSOFT_765
+#if !(defined(CONFIG_MALI_PWRSOFT_765) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0))
 	kbase_release_device(kbdev);
 #endif
 
 	return power;
 }
 
-#ifdef CONFIG_MALI_PWRSOFT_765
+#if defined(CONFIG_MALI_PWRSOFT_765) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 static unsigned long kbase_get_dynamic_power(struct devfreq *df,
 					     unsigned long freq,
 					     unsigned long voltage)
@@ -499,7 +500,8 @@ static unsigned long kbase_get_dynamic_power(unsigned long freq,
 	struct kbase_ipa_model *model;
 	u32 power_coeff = 0, power = 0;
 	int err = 0;
-#ifdef CONFIG_MALI_PWRSOFT_765
+#if defined(CONFIG_MALI_PWRSOFT_765) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 	struct kbase_device *kbdev = dev_get_drvdata(&df->dev);
 #else
 	struct kbase_device *kbdev = kbase_find_device(-1);
@@ -520,7 +522,8 @@ static unsigned long kbase_get_dynamic_power(unsigned long freq,
 
 	mutex_unlock(&kbdev->ipa.lock);
 
-#ifndef CONFIG_MALI_PWRSOFT_765
+#if !(defined(CONFIG_MALI_PWRSOFT_765) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0))
 	kbase_release_device(kbdev);
 #endif
 
@@ -560,7 +563,7 @@ int kbase_get_real_power(struct devfreq *df, u32 *power,
 		unsigned long total_time = max(status->total_time, 1ul);
 		u64 busy_time = min(status->busy_time, total_time);
 
-		*power = ((u64) *power * (u64) busy_time) / total_time;
+		*power = div_u64((u64) *power * (u64) busy_time, total_time);
 	}
 
 	*power += get_static_power_locked(kbdev, model, voltage);
@@ -579,7 +582,8 @@ struct devfreq_cooling_power kbase_ipa_power_model_ops = {
 #endif
 	.get_static_power = &kbase_get_static_power,
 	.get_dynamic_power = &kbase_get_dynamic_power,
-#ifdef CONFIG_MALI_PWRSOFT_765
+#if defined(CONFIG_MALI_PWRSOFT_765) || \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 	.get_real_power = &kbase_get_real_power,
 #endif
 };
